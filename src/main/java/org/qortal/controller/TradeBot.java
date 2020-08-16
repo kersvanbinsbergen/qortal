@@ -63,8 +63,8 @@ public class TradeBot {
 
 	private static final Logger LOGGER = LogManager.getLogger(TradeBot.class);
 	private static final Random RANDOM = new SecureRandom();
-	private static final long P2SHA_FEE_AMOUNT = 5000L;
-	private static final long P2SHB_FEE_AMOUNT = 5000L;
+	private static final long P2SHA_FEE_AMOUNT = 10000L; // We ideally need to use a higher fee when redeeming PS2H-A than we do for P2SH-B, as we'd like Bob's redeemed BTC to be confirmed in a reasonable amount of time. 10k sats will confirm within 6 blocks (1 hour) at current rates (Aug 2020).
+	private static final long P2SHB_FEE_AMOUNT = 5000L; // P2SH-B can use a lower fee because we accept a slower confirmation time for the redeemed value.
 
 	private static TradeBot instance;
 
