@@ -767,7 +767,7 @@ public class TradeBot {
 		}
 
 		// Redeem P2SH-B using secret-B
-		Coin redeemAmount = Coin.valueOf(P2SHB_REDEEM_AMOUNT); // The real funds are in P2SH-A
+		Coin redeemAmount = Coin.valueOf(P2SHB_REDEEM_AMOUNT); // We need to redeem an amount higher than the dust threshold (3000 sats/kB). The real funds are in P2SH-A
 		ECKey redeemKey = ECKey.fromPrivate(tradeBotData.getTradePrivateKey());
 		List<TransactionOutput> fundingOutputs = BTC.getInstance().getUnspentOutputs(p2shAddress);
 		byte[] receivingAccountInfo = tradeBotData.getReceivingAccountInfo();
