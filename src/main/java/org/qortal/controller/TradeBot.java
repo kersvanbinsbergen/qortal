@@ -64,6 +64,7 @@ public class TradeBot {
 	private static final Logger LOGGER = LogManager.getLogger(TradeBot.class);
 	private static final Random RANDOM = new SecureRandom();
 	private static final long FEE_AMOUNT = 5000L;
+	private static final long P2SHB_REDEEM_AMOUNT = 1000L;
 
 	private static TradeBot instance;
 
@@ -766,7 +767,7 @@ public class TradeBot {
 		}
 
 		// Redeem P2SH-B using secret-B
-		Coin redeemAmount = Coin.ZERO; // The real funds are in P2SH-A
+		Coin redeemAmount = Coin.valueOf(P2SHB_REDEEM_AMOUNT); // The real funds are in P2SH-A
 		ECKey redeemKey = ECKey.fromPrivate(tradeBotData.getTradePrivateKey());
 		List<TransactionOutput> fundingOutputs = BTC.getInstance().getUnspentOutputs(p2shAddress);
 		byte[] receivingAccountInfo = tradeBotData.getReceivingAccountInfo();
