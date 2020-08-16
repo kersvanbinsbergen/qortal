@@ -63,7 +63,8 @@ public class TradeBot {
 
 	private static final Logger LOGGER = LogManager.getLogger(TradeBot.class);
 	private static final Random RANDOM = new SecureRandom();
-	private static final long FEE_AMOUNT = 5000L;
+	private static final long P2SHA_FEE_AMOUNT = 5000L;
+	private static final long P2SHB_FEE_AMOUNT = 5000L;
 
 	private static TradeBot instance;
 
@@ -246,7 +247,7 @@ public class TradeBot {
 		// Check we have enough funds via xprv58 to fund both P2SHs to cover expectedBitcoin
 		String tradeForeignAddress = BTC.getInstance().pkhToAddress(tradeForeignPublicKeyHash);
 
-		long totalFundsRequired = crossChainTradeData.expectedBitcoin + FEE_AMOUNT /* P2SH-A */ + FEE_AMOUNT /* P2SH-B */;
+		long totalFundsRequired = crossChainTradeData.expectedBitcoin + P2SHA_FEE_AMOUNT + P2SHB_FEE_AMOUNT;
 
 		Transaction fundingCheckTransaction = BTC.getInstance().buildSpend(xprv58, tradeForeignAddress, totalFundsRequired);
 		if (fundingCheckTransaction == null)
@@ -257,7 +258,7 @@ public class TradeBot {
 		String p2shAddress = BTC.getInstance().deriveP2shAddress(redeemScriptBytes);
 
 		// Fund P2SH-A
-		Transaction p2shFundingTransaction = BTC.getInstance().buildSpend(tradeBotData.getXprv58(), p2shAddress, crossChainTradeData.expectedBitcoin + FEE_AMOUNT);
+		Transaction p2shFundingTransaction = BTC.getInstance().buildSpend(tradeBotData.getXprv58(), p2shAddress, crossChainTradeData.expectedBitcoin + P2SHA_FEE_AMOUNT);
 		if (p2shFundingTransaction == null) {
 			LOGGER.warn(() -> String.format("Unable to build P2SH-A funding transaction - lack of funds?"));
 			return ResponseResult.BTC_BALANCE_ISSUE;
@@ -694,7 +695,7 @@ public class TradeBot {
 		byte[] redeemScriptBytes = BTCP2SH.buildScript(tradeBotData.getTradeForeignPublicKeyHash(), lockTimeB, crossChainTradeData.creatorBitcoinPKH, crossChainTradeData.hashOfSecretB);
 		String p2shAddress = BTC.getInstance().deriveP2shAddress(redeemScriptBytes);
 
-		Transaction p2shFundingTransaction = BTC.getInstance().buildSpend(tradeBotData.getXprv58(), p2shAddress, FEE_AMOUNT);
+		Transaction p2shFundingTransaction = BTC.getInstance().buildSpend(tradeBotData.getXprv58(), p2shAddress, P2SHB_FEE_AMOUNT);
 		if (p2shFundingTransaction == null) {
 			LOGGER.warn(() -> String.format("Unable to build P2SH-B funding transaction - lack of funds?"));
 			return;
@@ -758,9 +759,9 @@ public class TradeBot {
 		String p2shAddress = BTC.getInstance().deriveP2shAddress(redeemScriptBytes);
 
 		Long balance = BTC.getInstance().getBalance(p2shAddress);
-		if (balance == null || balance < FEE_AMOUNT) {
+		if (balance == null || balance < P2SHB_FEE_AMOUNT) {
 			if (balance != null && balance > 0)
-				LOGGER.debug(() -> String.format("P2SH-B balance %s lower than expected %s", BTC.format(balance), BTC.format(FEE_AMOUNT)));
+				LOGGER.debug(() -> String.format("P2SH-B balance %s lower than expected %s", BTC.format(balance), BTC.format(P2SHB_FEE_AMOUNT)));
 
 			return;
 		}
