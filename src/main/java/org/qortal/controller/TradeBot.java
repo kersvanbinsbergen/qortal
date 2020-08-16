@@ -977,7 +977,7 @@ public class TradeBot {
 		byte[] redeemScriptBytes = BTCP2SH.buildScript(tradeBotData.getTradeForeignPublicKeyHash(), crossChainTradeData.lockTimeB, crossChainTradeData.creatorBitcoinPKH, crossChainTradeData.hashOfSecretB);
 		String p2shAddress = BTC.getInstance().deriveP2shAddress(redeemScriptBytes);
 
-		Coin refundAmount = Coin.ZERO;
+		Coin refundAmount = Coin.valueOf(P2SHB_REDEEM_AMOUNT); // We need to redeem an amount higher than the dust threshold (3000 sats/kB). The rest will be used to pay the fee.
 		ECKey refundKey = ECKey.fromPrivate(tradeBotData.getTradePrivateKey());
 		List<TransactionOutput> fundingOutputs = BTC.getInstance().getUnspentOutputs(p2shAddress);
 
