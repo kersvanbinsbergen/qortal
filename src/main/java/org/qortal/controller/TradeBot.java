@@ -590,6 +590,7 @@ public class TradeBot {
 
 			tradeBotData.setState(TradeBotData.State.BOB_WAITING_FOR_P2SH_B);
 			tradeBotData.setTimestamp(NTP.getTime());
+			tradeBotData.setLockTimeA(Integer.valueOf(lockTimeA));
 			repository.getCrossChainRepository().save(tradeBotData);
 			repository.saveChanges();
 
