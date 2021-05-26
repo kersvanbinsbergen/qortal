@@ -9,22 +9,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Run API tests
+    - name: Set up the Java JDK
       uses: actions/setup-java@v2
       with:
         java-version: '11'
         distribution: 'adopt'
-    - name: Run all API tests
-      run: mvn -B clean test -DskipTests -Dtest=org.qortal.test.api.* --file pom.xml
 
-  appsTests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Run API tests
-        uses: actions/setup-java@v2
-        with:
-          java-version: '11'
-          distribution: 'adopt'
-      - name: Run all apps tests
-        run: mvn -B clean test -DskipTests -Dtest=org.qortal.test.apps.* --file pom.xml
+    - name: Run all tests
+      run: mvn -B clean test -DskipTests=false --file pom.xml
+
+    - name: Log coverage percentage
+      run: |
+        echo "coverage = ${{ steps.jacoco.outputs.coverage }}"
+        echo "branch coverage = ${{ steps.jacoco.outputs.branches }}"
