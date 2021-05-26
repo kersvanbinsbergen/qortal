@@ -30,5 +30,4 @@ jobs:
     - name: Log coverage percentage
       run: |
         if [ ! -f "target/site/jacoco/index.html" ]; then echo "No coverage information available"; fi
-        echo "coverage = ${{ steps.jacoco.outputs.coverage }}"
-        echo "branch coverage = ${{ steps.jacoco.outputs.branches }}"
+        if [ -f "target/site/jacoco/index.html" ]; then echo "Total coverage: $(cat target/site/jacoco/index.html | grep -o 'Total[^%]*%' | grep -o '[0-9]*%')"; fi
