@@ -495,7 +495,7 @@ public class Network {
         }
     }
 
-    private void acceptConnection(ServerSocketChannel serverSocketChannel) throws InterruptedException {
+    protected void acceptConnection(ServerSocketChannel serverSocketChannel) throws InterruptedException {
         SocketChannel socketChannel;
 
         try {
@@ -621,7 +621,7 @@ public class Network {
         this.onPeerReady(newPeer);
     }
 
-    private Peer getPeerFromChannel(SocketChannel socketChannel) {
+    protected Peer getPeerFromChannel(SocketChannel socketChannel) {
         synchronized (this.connectedPeers) {
             for (Peer peer : this.connectedPeers) {
                 if (peer.getSocketChannel() == socketChannel) {
