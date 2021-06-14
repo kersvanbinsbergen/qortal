@@ -1,9 +1,8 @@
 package org.qortal.utils;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.*;
 
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -22,6 +21,7 @@ public abstract class ExecuteProduceConsume implements Runnable {
 		public int tasksProduced = 0;
 		public int tasksConsumed = 0;
 		public int spawnFailures = 0;
+		public Map<String, Integer> taskStats = new HashMap<>();
 
 		public StatsSnapshot() {
 		}
@@ -43,6 +43,7 @@ public abstract class ExecuteProduceConsume implements Runnable {
 	private volatile int tasksProduced = 0;
 	private volatile int tasksConsumed = 0;
 	private volatile int spawnFailures = 0;
+	private final ConcurrentHashMap<String, Integer> taskStats = new ConcurrentHashMap<>();
 
 	private volatile boolean hasThreadPending = false;
 
@@ -81,6 +82,7 @@ public abstract class ExecuteProduceConsume implements Runnable {
 			snapshot.tasksProduced = this.tasksProduced;
 			snapshot.tasksConsumed = this.tasksConsumed;
 			snapshot.spawnFailures = this.spawnFailures;
+			snapshot.taskStats.putAll(this.taskStats);
 		}
 
 		return snapshot;
@@ -175,6 +177,8 @@ public abstract class ExecuteProduceConsume implements Runnable {
 				synchronized (this) {
 					++this.tasksProduced;
 					++this.consumerCount;
+					String type = task.getClass().getSimpleName();
+					this.taskStats.put(type, (this.taskStats.getOrDefault(type, 0)) + 1);
 
 					this.logger.trace(() -> String.format("[%d] hasThreadPending: %b, activeThreadCount: %d, consumerCount now: %d",
 							Thread.currentThread().getId(), this.hasThreadPending, this.activeThreadCount, this.consumerCount));
