@@ -491,7 +491,7 @@ public class Peer {
         }
     }
 
-    protected ExecuteProduceConsume.Task getMessageTask() {
+    protected Task getMessageTask() {
         /*
          * If we are still handshaking and there is a message yet to be processed then
          * don't produce another message task. This allows us to process handshake
@@ -515,7 +515,7 @@ public class Peer {
         }
 
         // Return a task to process message in queue
-        return () -> Network.getInstance().onMessage(this, nextMessage);
+        return new MessageTask(this, nextMessage);
     }
 
     /**
@@ -625,7 +625,7 @@ public class Peer {
         this.lastPingSent = NTP.getTime();
     }
 
-    protected ExecuteProduceConsume.Task getPingTask(Long now) {
+    protected Task getPingTask(Long now) {
         // Pings not enabled yet?
         if (now == null || this.lastPingSent == null) {
             return null;
@@ -639,19 +639,7 @@ public class Peer {
         // Not strictly true, but prevents this peer from being immediately chosen again
         this.lastPingSent = now;
 
-        return () -> {
-            PingMessage pingMessage = new PingMessage();
-            Message message = this.getResponse(pingMessage);
-
-            if (message == null || message.getType() != MessageType.PING) {
-                LOGGER.debug("[{}] Didn't receive reply from {} for PING ID {}", this.peerConnectionId, this,
-                        pingMessage.getId());
-                this.disconnect("no ping received");
-                return;
-            }
-
-            this.setLastPing(NTP.getTime() - now);
-        };
+        return new PingTask(this, now);
     }
 
     public void disconnect(String reason) {

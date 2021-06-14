@@ -10,6 +10,7 @@ import javax.xml.bind.annotation.XmlAccessorType;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.qortal.network.Task;
 
 public abstract class ExecuteProduceConsume implements Runnable {
 
@@ -91,17 +92,12 @@ public abstract class ExecuteProduceConsume implements Runnable {
 
 	/**
 	 * Returns a Task to be performed, possibly blocking.
-	 * 
+	 *
 	 * @param canBlock
 	 * @return task to be performed, or null if no task pending.
 	 * @throws InterruptedException
 	 */
 	protected abstract Task produceTask(boolean canBlock) throws InterruptedException;
-
-	@FunctionalInterface
-	public interface Task {
-		public abstract void perform() throws InterruptedException;
-	}
 
 	@Override
 	public void run() {
