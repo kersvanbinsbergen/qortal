@@ -454,7 +454,7 @@ public class HSQLDBATRepository implements ATRepository {
 	@Override
 	public List<ATStateData> getMatchingFinalATStatesQuorum(byte[] codeHash, Boolean isFinished,
 			Integer dataByteOffset, Long expectedValue,
-			int minimumCount, long minimumPeriod) throws DataException {
+			int minimumCount, int maximumCount, long minimumPeriod) throws DataException {
 		// We need most recent entry first so we can use its timestamp to slice further results
 		List<ATStateData> mostRecentStates = this.getMatchingFinalATStates(codeHash, isFinished,
 				dataByteOffset, expectedValue, null,
@@ -510,7 +510,8 @@ public class HSQLDBATRepository implements ATRepository {
 		bindParams.add(minimumHeight);
 		bindParams.add(minimumCount);
 
-		sql.append("ORDER BY FinalATStates.height DESC");
+		sql.append("ORDER BY FinalATStates.height DESC LIMIT ?");
+		bindParams.add(maximumCount);
 
 		List<ATStateData> atStates = new ArrayList<>();
 
@@ -541,9 +542,9 @@ public class HSQLDBATRepository implements ATRepository {
 	public List<ATStateData> getBlockATStatesAtHeight(int height) throws DataException {
 		String sql = "SELECT AT_address, state_hash, fees, is_initial "
 				+ "FROM ATs "
-				+ "LEFT OUTER JOIN ATStates "
-				+ "ON ATStates.AT_address = ATs.AT_address AND height = ? "
-				+ "WHERE ATStates.AT_address IS NOT NULL "
+				+ "JOIN ATStates "
+				+ "ON ATStates.AT_address = ATs.AT_address "
+				+ "WHERE height = ? "
 				+ "ORDER BY created_when ASC";
 
 		List<ATStateData> atStates = new ArrayList<>();

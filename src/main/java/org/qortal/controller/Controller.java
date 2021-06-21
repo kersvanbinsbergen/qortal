@@ -259,17 +259,29 @@ public class Controller extends Thread {
 			throw new RuntimeException("Can't read build.properties resource", e);
 		}
 
+		// Determine build timestamp
 		String buildTimestampProperty = properties.getProperty("build.timestamp");
-		if (buildTimestampProperty == null)
+		if (buildTimestampProperty == null) {
 			throw new RuntimeException("Can't read build.timestamp from build.properties resource");
-
-		this.buildTimestamp = LocalDateTime.parse(buildTimestampProperty, DateTimeFormatter.ofPattern("yyyyMMddHHmmss")).toEpochSecond(ZoneOffset.UTC);
+		}
+		if (buildTimestampProperty.startsWith("$")) {
+			// Maven vars haven't been replaced - this was most likely built using an IDE, not via mvn package
+			this.buildTimestamp = System.currentTimeMillis();
+			buildTimestampProperty = "unknown";
+		} else {
+			this.buildTimestamp = LocalDateTime.parse(buildTimestampProperty, DateTimeFormatter.ofPattern("yyyyMMddHHmmss")).toEpochSecond(ZoneOffset.UTC);
+		}
 		LOGGER.info(String.format("Build timestamp: %s", buildTimestampProperty));
 
+		// Determine build version
 		String buildVersionProperty = properties.getProperty("build.version");
-		if (buildVersionProperty == null)
+		if (buildVersionProperty == null) {
 			throw new RuntimeException("Can't read build.version from build.properties resource");
-
+		}
+		if (buildVersionProperty.contains("${git.commit.id.abbrev}")) {
+			// Maven vars haven't been replaced - this was most likely built using an IDE, not via mvn package
+			buildVersionProperty = buildVersionProperty.replace("${git.commit.id.abbrev}", "debug");
+		}
 		this.buildVersion = VERSION_PREFIX + buildVersionProperty;
 		LOGGER.info(String.format("Build version: %s", this.buildVersion));
 
@@ -623,6 +635,11 @@ public class Controller extends Thread {
 		return peerChainTipData == null || peerChainTipData.getLastBlockSignature() == null || inferiorChainTips.contains(new ByteArray(peerChainTipData.getLastBlockSignature()));
 	};
 
+	public static final Predicate<Peer> hasOldVersion = peer -> {
+		final String minPeerVersion = Settings.getInstance().getMinPeerVersion();
+		return peer.isAtLeastVersion(minPeerVersion) == false;
+	};
+
 	private void potentiallySynchronize() throws InterruptedException {
 		// Already synchronizing via another thread?
 		if (this.isSynchronizing)
@@ -639,11 +656,15 @@ public class Controller extends Thread {
 		// Disregard peers that don't have a recent block
 		peers.removeIf(hasNoRecentBlock);
 
+		// Disregard peers that are on an old version
+		peers.removeIf(hasOldVersion);
+
 		checkRecoveryModeForPeers(peers);
 		if (recoveryMode) {
 			peers = Network.getInstance().getHandshakedPeers();
 			peers.removeIf(hasOnlyGenesisBlock);
 			peers.removeIf(hasMisbehaved);
+			peers.removeIf(hasOldVersion);
 		}
 
 		// Check we have enough peers to potentially synchronize
@@ -668,8 +689,8 @@ public class Controller extends Thread {
 		peers.removeIf(hasInferiorChainTip);
 
 		final int peersRemoved = peersBeforeComparison - peers.size();
-		if (peersRemoved > 0)
-			LOGGER.info(String.format("Ignoring %d peers on inferior chains. Peers remaining: %d", peersRemoved, peers.size()));
+		if (peersRemoved > 0 && peers.size() > 0)
+			LOGGER.debug(String.format("Ignoring %d peers on inferior chains. Peers remaining: %d", peersRemoved, peers.size()));
 
 		if (peers.isEmpty())
 			return;
@@ -678,7 +699,7 @@ public class Controller extends Thread {
 			StringBuilder finalPeersString = new StringBuilder();
 			for (Peer peer : peers)
 				finalPeersString = finalPeersString.length() > 0 ? finalPeersString.append(", ").append(peer) : finalPeersString.append(peer);
-			LOGGER.info(String.format("Choosing random peer from: [%s]", finalPeersString.toString()));
+			LOGGER.debug(String.format("Choosing random peer from: [%s]", finalPeersString.toString()));
 		}
 
 		// Pick random peer to sync with
@@ -701,6 +722,7 @@ public class Controller extends Thread {
 				hasStatusChanged = true;
 			}
 		}
+		peer.setSyncInProgress(true);
 
 		if (hasStatusChanged)
 			updateSysTray();
@@ -780,6 +802,7 @@ public class Controller extends Thread {
 			return syncResult;
 		} finally {
 			isSynchronizing = false;
+			peer.setSyncInProgress(false);
 		}
 	}
 
@@ -874,13 +897,18 @@ public class Controller extends Thread {
 
 			List<TransactionData> transactions = repository.getTransactionRepository().getUnconfirmedTransactions();
 
+			int deletedCount = 0;
 			for (TransactionData transactionData : transactions) {
 				Transaction transaction = Transaction.fromData(repository, transactionData);
 
 				if (now >= transaction.getDeadline()) {
-					LOGGER.info(() -> String.format("Deleting expired, unconfirmed transaction %s", Base58.encode(transactionData.getSignature())));
+					LOGGER.debug(() -> String.format("Deleting expired, unconfirmed transaction %s", Base58.encode(transactionData.getSignature())));
 					repository.getTransactionRepository().delete(transactionData);
+					deletedCount++;
 				}
+			}
+			if (deletedCount > 0) {
+				LOGGER.info(String.format("Deleted %d expired, unconfirmed transaction%s", deletedCount, (deletedCount == 1 ? "" : "s")));
 			}
 
 			repository.saveChanges();

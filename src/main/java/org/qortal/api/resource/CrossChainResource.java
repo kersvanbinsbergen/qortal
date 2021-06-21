@@ -255,13 +255,19 @@ public class CrossChainResource {
 					description = "foreign blockchain",
 					example = "LITECOIN",
 					schema = @Schema(implementation = SupportedBlockchain.class)
-				) @PathParam("blockchain") SupportedBlockchain foreignBlockchain) {
+				) @PathParam("blockchain") SupportedBlockchain foreignBlockchain,
+			@Parameter(
+					description = "Maximum number of trades to include in price calculation",
+					example = "10",
+					schema = @Schema(type = "integer", defaultValue = "10")
+			) @QueryParam("maxtrades") Integer maxtrades) {
 		// foreignBlockchain is required
 		if (foreignBlockchain == null)
 			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_CRITERIA);
 
 		// We want both a minimum of 5 trades and enough trades to span at least 4 hours
 		int minimumCount = 5;
+		int maximumCount = maxtrades != null ? maxtrades : 10;
 		long minimumPeriod = 4 * 60 * 60 * 1000L; // ms
 		Boolean isFinished = Boolean.TRUE;
 
@@ -276,7 +282,7 @@ public class CrossChainResource {
 				ACCT acct = acctInfo.getValue().get();
 
 				List<ATStateData> atStates = repository.getATRepository().getMatchingFinalATStatesQuorum(codeHash,
-						isFinished, acct.getModeByteOffset(), (long) AcctMode.REDEEMED.value, minimumCount, minimumPeriod);
+						isFinished, acct.getModeByteOffset(), (long) AcctMode.REDEEMED.value, minimumCount, maximumCount, minimumPeriod);
 
 				for (ATStateData atState : atStates) {
 					CrossChainTradeData crossChainTradeData = acct.populateTradeData(repository, atState);

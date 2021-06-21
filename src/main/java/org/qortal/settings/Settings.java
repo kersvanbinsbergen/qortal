@@ -122,6 +122,20 @@ public class Settings {
 	private int maxNetworkThreadPoolSize = 20;
 	/** Maximum number of threads for network proof-of-work compute, used during handshaking. */
 	private int networkPoWComputePoolSize = 2;
+	/** Maximum number of retry attempts if a peer fails to respond with the requested data */
+	private int maxRetries = 2;
+
+	/** Minimum peer version number required in order to sync with them */
+	private String minPeerVersion = "1.5.0";
+	/** Whether to allow connections with peers below minPeerVersion
+	 * If true, we won't sync with them but they can still sync with us, and will show in the peers list
+	 * If false, sync will be blocked both ways, and they will not appear in the peers list */
+	private boolean allowConnectionsWithOlderPeerVersions = true;
+
+	/** Minimum time (in seconds) that we should attempt to remain connected to a peer for */
+	private int minPeerConnectionTime = 2 * 60; // seconds
+	/** Maximum time (in seconds) that we should attempt to remain connected to a peer for */
+	private int maxPeerConnectionTime = 20 * 60; // seconds
 
 	// Which blockchains this node is running
 	private String blockchainConfig = null; // use default from resources
@@ -407,6 +421,16 @@ public class Settings {
 	public int getNetworkPoWComputePoolSize() {
 		return this.networkPoWComputePoolSize;
 	}
+
+	public int getMaxRetries() { return this.maxRetries; }
+
+	public String getMinPeerVersion() { return this.minPeerVersion; }
+
+	public boolean getAllowConnectionsWithOlderPeerVersions() { return this.allowConnectionsWithOlderPeerVersions; }
+
+	public int getMinPeerConnectionTime() { return this.minPeerConnectionTime; }
+
+	public int getMaxPeerConnectionTime() { return this.maxPeerConnectionTime; }
 
 	public String getBlockchainConfig() {
 		return this.blockchainConfig;

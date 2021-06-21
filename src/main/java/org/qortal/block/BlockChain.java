@@ -72,7 +72,8 @@ public class BlockChain {
 	public enum FeatureTrigger {
 		atFindNextTransactionFix,
 		newBlockSigHeight,
-		shareBinFix;
+		shareBinFix,
+		calcChainWeightTimestamp;
 	}
 
 	/** Map of which blockchain features are enabled when (height/timestamp) */
@@ -384,6 +385,10 @@ public class BlockChain {
 
 	public int getShareBinFixHeight() {
 		return this.featureTriggers.get(FeatureTrigger.shareBinFix.name()).intValue();
+	}
+
+	public long getCalcChainWeightTimestamp() {
+		return this.featureTriggers.get(FeatureTrigger.calcChainWeightTimestamp.name()).longValue();
 	}
 
 	// More complex getters for aspects that change by height or timestamp

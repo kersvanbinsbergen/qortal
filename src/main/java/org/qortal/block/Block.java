@@ -232,7 +232,7 @@ public class Block {
 
 	// Other useful constants
 
-	private static final BigInteger MAX_DISTANCE;
+	public static final BigInteger MAX_DISTANCE;
 	static {
 		byte[] maxValue = new byte[Transformer.PUBLIC_KEY_LENGTH];
 		Arrays.fill(maxValue, (byte) 0xFF);
@@ -796,7 +796,9 @@ public class Block {
 		NumberFormat formatter = new DecimalFormat("0.###E0");
 		boolean isLogging = LOGGER.getLevel().isLessSpecificThan(Level.TRACE);
 
+		int blockCount = 0;
 		for (BlockSummaryData blockSummaryData : blockSummaries) {
+			blockCount++;
 			StringBuilder stringBuilder = isLogging ? new StringBuilder(512) : null;
 
 			if (isLogging)
@@ -825,11 +827,11 @@ public class Block {
 			parentHeight = blockSummaryData.getHeight();
 			parentBlockSignature = blockSummaryData.getSignature();
 
-			/* Potential future consensus change: only comparing the same number of blocks.
-			if (parentHeight >= maxHeight)
+			// After this timestamp, we only compare the same number of blocks
+			if (NTP.getTime() >= BlockChain.getInstance().getCalcChainWeightTimestamp() && parentHeight >= maxHeight)
 				break;
-			*/
 		}
+		LOGGER.trace(String.format("Chain weight calculation was based on %d blocks", blockCount));
 
 		return cumulativeWeight;
 	}
@@ -1335,6 +1337,9 @@ public class Block {
 
 		// Give Controller our cached, valid online accounts data (if any) to help reduce CPU load for next block
 		Controller.getInstance().pushLatestBlocksOnlineAccounts(this.cachedValidOnlineAccounts);
+
+		// Log some debugging info relating to the block weight calculation
+		this.logDebugInfo();
 	}
 
 	protected void increaseAccountLevels() throws DataException {
@@ -1515,6 +1520,9 @@ public class Block {
 	 */
 	public void orphan() throws DataException {
 		LOGGER.trace(() -> String.format("Orphaning block %d", this.blockData.getHeight()));
+
+		// Log some debugging info relating to the block weight calculation
+		this.logDebugInfo();
 
 		// Return AT fees and delete AT states from repository
 		orphanAtFeesAndStates();
@@ -1986,6 +1994,40 @@ public class Block {
 	/** Opportunity to tidy repository, etc. after block process/orphan. */
 	private void postBlockTidy() throws DataException {
 		this.repository.getAccountRepository().tidy();
+	}
+
+	private void logDebugInfo() {
+		try {
+			// Avoid calculations if possible. We have to check against INFO here, since Level.isMoreSpecificThan() confusingly uses <= rather than just <
+			if (LOGGER.getLevel().isMoreSpecificThan(Level.INFO))
+				return;
+
+			if (this.repository == null || this.getMinter() == null || this.getBlockData() == null)
+				return;
+
+			int minterLevel = Account.getRewardShareEffectiveMintingLevel(this.repository, this.getMinter().getPublicKey());
+
+			LOGGER.debug(String.format("======= BLOCK %d (%.8s) =======", this.getBlockData().getHeight(), Base58.encode(this.getSignature())));
+			LOGGER.debug(String.format("Timestamp: %d", this.getBlockData().getTimestamp()));
+			LOGGER.debug(String.format("Minter level: %d", minterLevel));
+			LOGGER.debug(String.format("Online accounts: %d", this.getBlockData().getOnlineAccountsCount()));
+			LOGGER.debug(String.format("AT count: %d", this.getBlockData().getATCount()));
+
+			BlockSummaryData blockSummaryData = new BlockSummaryData(this.getBlockData());
+			if (this.getParent() == null || this.getParent().getSignature() == null || blockSummaryData == null || minterLevel == 0)
+				return;
+
+			blockSummaryData.setMinterLevel(minterLevel);
+			BigInteger blockWeight = calcBlockWeight(this.getParent().getHeight(), this.getParent().getSignature(), blockSummaryData);
+			BigInteger keyDistance = calcKeyDistance(this.getParent().getHeight(), this.getParent().getSignature(), blockSummaryData.getMinterPublicKey(), blockSummaryData.getMinterLevel());
+			NumberFormat formatter = new DecimalFormat("0.###E0");
+
+			LOGGER.debug(String.format("Key distance: %s", formatter.format(keyDistance)));
+			LOGGER.debug(String.format("Weight: %s", formatter.format(blockWeight)));
+
+		} catch (DataException e) {
+			LOGGER.info(() -> String.format("Unable to log block debugging info: %s", e.getMessage()));
+		}
 	}
 
 }

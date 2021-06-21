@@ -16,6 +16,7 @@ import org.qortal.account.Account;
 import org.qortal.account.PublicKeyAccount;
 import org.qortal.block.Block;
 import org.qortal.block.Block.ValidationResult;
+import org.qortal.block.BlockChain;
 import org.qortal.data.block.BlockData;
 import org.qortal.data.block.BlockSummaryData;
 import org.qortal.data.block.CommonBlockData;
@@ -34,8 +35,10 @@ import org.qortal.network.message.Message.MessageType;
 import org.qortal.repository.DataException;
 import org.qortal.repository.Repository;
 import org.qortal.repository.RepositoryManager;
+import org.qortal.settings.Settings;
 import org.qortal.transaction.Transaction;
 import org.qortal.utils.Base58;
+import org.qortal.utils.NTP;
 
 public class Synchronizer {
 
@@ -55,9 +58,9 @@ public class Synchronizer {
 	/** Maximum number of block signatures we ask from peer in one go */
 	private static final int MAXIMUM_REQUEST_SIZE = 200; // XXX move to Settings?
 
-	/** Number of retry attempts if a peer fails to respond with the requested data */
-	private static final int MAXIMUM_RETRIES = 2; // XXX move to Settings?
 
+	// Keep track of the size of the last re-org, so it can be logged
+	private int lastReorgSize;
 
 	private static Synchronizer instance;
 
@@ -111,6 +114,7 @@ public class Synchronizer {
 				LOGGER.debug(String.format("Searching for common blocks with %d peers...", peers.size()));
 				final long startTime = System.currentTimeMillis();
 				int commonBlocksFound = 0;
+				boolean wereNewRequestsMade = false;
 
 				for (Peer peer : peers) {
 					// Are we shutting down?
@@ -120,6 +124,7 @@ public class Synchronizer {
 					// Check if we can use the cached common block data, by comparing the peer's current chain tip against the peer's chain tip when we last found our common block
 					if (peer.canUseCachedCommonBlockData()) {
 						LOGGER.debug(String.format("Skipping peer %s because we already have the latest common block data in our cache. Cached common block sig is %.08s", peer, Base58.encode(peer.getCommonBlockData().getCommonBlockSummary().getSignature())));
+						commonBlocksFound++;
 						continue;
 					}
 
@@ -130,10 +135,15 @@ public class Synchronizer {
 					Synchronizer.getInstance().findCommonBlockWithPeer(peer, repository);
 					if (peer.getCommonBlockData() != null)
 						commonBlocksFound++;
+
+					// This round wasn't served entirely from the cache, so we may want to log the results
+					wereNewRequestsMade = true;
 				}
 
-				final long totalTimeTaken = System.currentTimeMillis() - startTime;
-				LOGGER.info(String.format("Finished searching for common blocks with %d peer%s. Found: %d. Total time taken: %d ms", peers.size(), (peers.size() != 1 ? "s" : ""), commonBlocksFound, totalTimeTaken));
+				if (wereNewRequestsMade) {
+					final long totalTimeTaken = System.currentTimeMillis() - startTime;
+					LOGGER.debug(String.format("Finished searching for common blocks with %d peer%s. Found: %d. Total time taken: %d ms", peers.size(), (peers.size() != 1 ? "s" : ""), commonBlocksFound, totalTimeTaken));
+				}
 
 				return SynchronizationResult.OK;
 			} finally {
@@ -171,7 +181,7 @@ public class Synchronizer {
 					ourInitialHeight, Base58.encode(ourLastBlockSignature), ourLatestBlockData.getTimestamp()));
 
 			List<BlockSummaryData> peerBlockSummaries = new ArrayList<>();
-			SynchronizationResult findCommonBlockResult = fetchSummariesFromCommonBlock(repository, peer, ourInitialHeight, false, peerBlockSummaries);
+			SynchronizationResult findCommonBlockResult = fetchSummariesFromCommonBlock(repository, peer, ourInitialHeight, false, peerBlockSummaries, false);
 			if (findCommonBlockResult != SynchronizationResult.OK) {
 				// Logging performed by fetchSummariesFromCommonBlock() above
 				peer.setCommonBlockData(null);
@@ -226,6 +236,10 @@ public class Synchronizer {
 					return peers;
 				}
 
+				// We will switch to a new chain weight consensus algorithm at a hard fork, so determine if this has happened yet
+				boolean usingSameLengthChainWeight = (NTP.getTime() >= BlockChain.getInstance().getCalcChainWeightTimestamp());
+				LOGGER.debug(String.format("Using %s chain weight consensus algorithm", (usingSameLengthChainWeight ? "same-length" : "variable-length")));
+
 				// Retrieve a list of unique common blocks from this list of peers
 				List<BlockSummaryData> commonBlocks = this.uniqueCommonBlocks(peers);
 
@@ -267,7 +281,7 @@ public class Synchronizer {
 
 					// Calculate the length of the shortest peer chain sharing this common block, including our chain
 					final int ourAdditionalBlocksAfterCommonBlock = ourHeight - commonBlockSummary.getHeight();
-					int minChainLength = this.calculateMinChainLength(commonBlockSummary, ourAdditionalBlocksAfterCommonBlock, peersSharingCommonBlock);
+					int minChainLength = this.calculateMinChainLengthOfPeers(peersSharingCommonBlock, commonBlockSummary);
 
 					// Fetch block summaries from each peer
 					for (Peer peer : peersSharingCommonBlock) {
@@ -277,7 +291,9 @@ public class Synchronizer {
 							return peers;
 
 						// Count the number of blocks this peer has beyond our common block
-						final int peerHeight = peer.getChainTipData().getLastHeight();
+						final PeerChainTipData peerChainTipData = peer.getChainTipData();
+						final int peerHeight = peerChainTipData.getLastHeight();
+						final byte[] peerLastBlockSignature = peerChainTipData.getLastBlockSignature();
 						final int peerAdditionalBlocksAfterCommonBlock = peerHeight - commonBlockSummary.getHeight();
 						// Limit the number of blocks we are comparing. FUTURE: we could request more in batches, but there may not be a case when this is needed
 						int summariesRequired = Math.min(peerAdditionalBlocksAfterCommonBlock, MAXIMUM_REQUEST_SIZE);
@@ -287,7 +303,7 @@ public class Synchronizer {
 						if (peer.canUseCachedCommonBlockData()) {
 							if (peer.getCommonBlockData().getBlockSummariesAfterCommonBlock() != null) {
 								if (peer.getCommonBlockData().getBlockSummariesAfterCommonBlock().size() == summariesRequired) {
-									LOGGER.debug(String.format("Using cached block summaries for peer %s", peer));
+									LOGGER.trace(String.format("Using cached block summaries for peer %s", peer));
 									useCachedSummaries = true;
 								}
 							}
@@ -297,49 +313,65 @@ public class Synchronizer {
 							if (summariesRequired > 0) {
 								LOGGER.trace(String.format("Requesting %d block summar%s from peer %s after common block %.8s. Peer height: %d", summariesRequired, (summariesRequired != 1 ? "ies" : "y"), peer, Base58.encode(commonBlockSummary.getSignature()), peerHeight));
 
-								List<BlockSummaryData> blockSummaries = this.getBlockSummaries(peer, commonBlockSummary.getSignature(), summariesRequired);
-								peer.getCommonBlockData().setBlockSummariesAfterCommonBlock(blockSummaries);
+								// Forget any cached summaries
+								peer.getCommonBlockData().setBlockSummariesAfterCommonBlock(null);
 
+								// Request new block summaries
+								List<BlockSummaryData> blockSummaries = this.getBlockSummaries(peer, commonBlockSummary.getSignature(), summariesRequired);
 								if (blockSummaries != null) {
 									LOGGER.trace(String.format("Peer %s returned %d block summar%s", peer, blockSummaries.size(), (blockSummaries.size() != 1 ? "ies" : "y")));
 
-									// We need to adjust minChainLength if peers fail to return all expected block summaries
-									if (blockSummaries.size() < summariesRequired) {
-										// This could mean that the peer has re-orged. But we still have the same common block, so it's safe to proceed with this set of signatures instead.
-										LOGGER.debug(String.format("Peer %s returned %d block summar%s instead of expected %d", peer, blockSummaries.size(), (blockSummaries.size() != 1 ? "ies" : "y"), summariesRequired));
-
-										// Update minChainLength if we have at least 1 block for this peer. If we don't have any blocks, this peer will be excluded from chain weight comparisons later in the process, so we shouldn't update minChainLength
-										if (blockSummaries.size() > 0)
-											minChainLength = blockSummaries.size();
-									}
+									if (blockSummaries.size() < summariesRequired)
+										// This could mean that the peer has re-orged. Exclude this peer until they return the summaries we expect.
+										LOGGER.debug(String.format("Peer %s returned %d block summar%s instead of expected %d - excluding them from this round", peer, blockSummaries.size(), (blockSummaries.size() != 1 ? "ies" : "y"), summariesRequired));
+									else if (blockSummaryWithSignature(peerLastBlockSignature, blockSummaries) == null)
+										// We don't have a block summary for the peer's reported chain tip, so should exclude it
+										LOGGER.debug(String.format("Peer %s didn't return a block summary with signature %.8s - excluding them from this round", peer, Base58.encode(peerLastBlockSignature)));
+									else
+										// All looks good, so store the retrieved block summaries in the peer's cache
+										peer.getCommonBlockData().setBlockSummariesAfterCommonBlock(blockSummaries);
 								}
 							} else {
 								// There are no block summaries after this common block
 								peer.getCommonBlockData().setBlockSummariesAfterCommonBlock(null);
 							}
 						}
+
+						// Reduce minChainLength if needed. If we don't have any blocks, this peer will be excluded from chain weight comparisons later in the process, so we shouldn't update minChainLength
+						List <BlockSummaryData> peerBlockSummaries = peer.getCommonBlockData().getBlockSummariesAfterCommonBlock();
+						if (peerBlockSummaries != null && peerBlockSummaries.size() > 0)
+							if (peerBlockSummaries.size() < minChainLength)
+								minChainLength = peerBlockSummaries.size();
 					}
 
 					// Fetch our corresponding block summaries. Limit to MAXIMUM_REQUEST_SIZE, in order to make the comparison fairer, as peers have been limited too
 					final int ourSummariesRequired = Math.min(ourAdditionalBlocksAfterCommonBlock, MAXIMUM_REQUEST_SIZE);
 					LOGGER.trace(String.format("About to fetch our block summaries from %d to %d. Our height: %d", commonBlockSummary.getHeight() + 1, commonBlockSummary.getHeight() + ourSummariesRequired, ourHeight));
 					List<BlockSummaryData> ourBlockSummaries = repository.getBlockRepository().getBlockSummaries(commonBlockSummary.getHeight() + 1, commonBlockSummary.getHeight() + ourSummariesRequired);
-					if (ourBlockSummaries.isEmpty())
+					if (ourBlockSummaries.isEmpty()) {
 						LOGGER.debug(String.format("We don't have any block summaries so can't compare our chain against peers with this common block. We can still compare them against each other."));
-					else
+					}
+					else {
 						populateBlockSummariesMinterLevels(repository, ourBlockSummaries);
+						// Reduce minChainLength if we have less summaries
+						if (ourBlockSummaries.size() < minChainLength)
+							minChainLength = ourBlockSummaries.size();
+					}
 
 					// Create array to hold peers for comparison
 					List<Peer> superiorPeersForComparison = new ArrayList<>();
 
+					// Calculate max height for chain weight comparisons
+					int maxHeightForChainWeightComparisons = commonBlockSummary.getHeight() + minChainLength;
+
 					// Calculate our chain weight
 					BigInteger ourChainWeight = BigInteger.valueOf(0);
 					if (ourBlockSummaries.size() > 0)
-						ourChainWeight = Block.calcChainWeight(commonBlockSummary.getHeight(), commonBlockSummary.getSignature(), ourBlockSummaries, minChainLength);
+						ourChainWeight = Block.calcChainWeight(commonBlockSummary.getHeight(), commonBlockSummary.getSignature(), ourBlockSummaries, maxHeightForChainWeightComparisons);
 
 					NumberFormat formatter = new DecimalFormat("0.###E0");
 					NumberFormat accurateFormatter = new DecimalFormat("0.################E0");
-					LOGGER.debug(String.format("Our chain weight based on %d blocks is %s", ourBlockSummaries.size(), formatter.format(ourChainWeight)));
+					LOGGER.debug(String.format("Our chain weight based on %d blocks is %s", (usingSameLengthChainWeight ? minChainLength : ourBlockSummaries.size()), formatter.format(ourChainWeight)));
 
 					LOGGER.debug(String.format("Listing peers with common block %.8s...", Base58.encode(commonBlockSummary.getSignature())));
 					for (Peer peer : peersSharingCommonBlock) {
@@ -358,10 +390,10 @@ public class Synchronizer {
 						populateBlockSummariesMinterLevels(repository, peerBlockSummariesAfterCommonBlock);
 
 						// Calculate cumulative chain weight of this blockchain subset, from common block to highest mutual block held by all peers in this group.
-						LOGGER.debug(String.format("About to calculate chain weight based on %d blocks for peer %s with common block %.8s (peer has %d blocks after common block)", peerBlockSummariesAfterCommonBlock.size(), peer, Base58.encode(commonBlockSummary.getSignature()), peerAdditionalBlocksAfterCommonBlock));
-						BigInteger peerChainWeight = Block.calcChainWeight(commonBlockSummary.getHeight(), commonBlockSummary.getSignature(), peerBlockSummariesAfterCommonBlock, minChainLength);
+						LOGGER.debug(String.format("About to calculate chain weight based on %d blocks for peer %s with common block %.8s (peer has %d blocks after common block)", (usingSameLengthChainWeight ? minChainLength : peerBlockSummariesAfterCommonBlock.size()), peer, Base58.encode(commonBlockSummary.getSignature()), peerAdditionalBlocksAfterCommonBlock));
+						BigInteger peerChainWeight = Block.calcChainWeight(commonBlockSummary.getHeight(), commonBlockSummary.getSignature(), peerBlockSummariesAfterCommonBlock, maxHeightForChainWeightComparisons);
 						peer.getCommonBlockData().setChainWeight(peerChainWeight);
-						LOGGER.debug(String.format("Chain weight of peer %s based on %d blocks (%d - %d) is %s", peer, peerBlockSummariesAfterCommonBlock.size(), peerBlockSummariesAfterCommonBlock.get(0).getHeight(), peerBlockSummariesAfterCommonBlock.get(peerBlockSummariesAfterCommonBlock.size()-1).getHeight(), formatter.format(peerChainWeight)));
+						LOGGER.debug(String.format("Chain weight of peer %s based on %d blocks (%d - %d) is %s", peer, (usingSameLengthChainWeight ? minChainLength : peerBlockSummariesAfterCommonBlock.size()), peerBlockSummariesAfterCommonBlock.get(0).getHeight(), peerBlockSummariesAfterCommonBlock.get(peerBlockSummariesAfterCommonBlock.size()-1).getHeight(), formatter.format(peerChainWeight)));
 
 						// Compare against our chain - if our blockchain has greater weight then don't synchronize with peer (or any others in this group)
 						if (ourChainWeight.compareTo(peerChainWeight) > 0) {
@@ -370,8 +402,8 @@ public class Synchronizer {
 							peers.remove(peer);
 						}
 						else {
-							// Our chain is inferior
-							LOGGER.debug(String.format("Peer %s is on a better chain to us. We will compare the other peers sharing this common block against each other, and drop all peers sharing higher common blocks.", peer));
+							// Our chain is inferior or equal
+							LOGGER.debug(String.format("Peer %s is on an equal or better chain to us. We will compare the other peers sharing this common block against each other, and drop all peers sharing higher common blocks.", peer));
 							dropPeersAfterCommonBlockHeight = commonBlockSummary.getHeight();
 							superiorPeersForComparison.add(peer);
 						}
@@ -393,6 +425,9 @@ public class Synchronizer {
 								peers.remove(peer);
 							}
 						}
+						// FUTURE: we may want to prefer peers with additional blocks, and compare the additional blocks against each other.
+						// This would fast track us to the best candidate for the latest block.
+						// Right now, peers with the exact same chain as us are treated equally to those with an additional block.
 					}
 				}
 
@@ -411,31 +446,37 @@ public class Synchronizer {
 
 		for (Peer peer : peers) {
 			if (peer.getCommonBlockData() != null && peer.getCommonBlockData().getCommonBlockSummary() != null) {
-				LOGGER.debug(String.format("Peer %s has common block %.8s", peer, Base58.encode(peer.getCommonBlockData().getCommonBlockSummary().getSignature())));
+				LOGGER.trace(String.format("Peer %s has common block %.8s", peer, Base58.encode(peer.getCommonBlockData().getCommonBlockSummary().getSignature())));
 
 				BlockSummaryData commonBlockSummary = peer.getCommonBlockData().getCommonBlockSummary();
 				if (!commonBlocks.contains(commonBlockSummary))
 					commonBlocks.add(commonBlockSummary);
 			}
 			else {
-				LOGGER.debug(String.format("Peer %s has no common block data. Skipping...", peer));
+				LOGGER.trace(String.format("Peer %s has no common block data. Skipping...", peer));
 			}
 		}
 
 		return commonBlocks;
 	}
 
-	private int calculateMinChainLength(BlockSummaryData commonBlockSummary, int ourAdditionalBlocksAfterCommonBlock, List<Peer> peersSharingCommonBlock) {
-		// Calculate the length of the shortest peer chain sharing this common block, including our chain
-		int minChainLength = ourAdditionalBlocksAfterCommonBlock;
+	private int calculateMinChainLengthOfPeers(List<Peer> peersSharingCommonBlock, BlockSummaryData commonBlockSummary) {
+		// Calculate the length of the shortest peer chain sharing this common block
+		int minChainLength = 0;
 		for (Peer peer : peersSharingCommonBlock) {
 			final int peerHeight = peer.getChainTipData().getLastHeight();
 			final int peerAdditionalBlocksAfterCommonBlock = peerHeight - commonBlockSummary.getHeight();
 
-			if (peerAdditionalBlocksAfterCommonBlock < minChainLength)
+			if (peerAdditionalBlocksAfterCommonBlock < minChainLength || minChainLength == 0)
 				minChainLength = peerAdditionalBlocksAfterCommonBlock;
 		}
 		return minChainLength;
+	}
+
+	private BlockSummaryData blockSummaryWithSignature(byte[] signature, List<BlockSummaryData> blockSummaries) {
+		if (blockSummaries != null)
+			return blockSummaries.stream().filter(blockSummary -> Arrays.equals(blockSummary.getSignature(), signature)).findAny().orElse(null);
+		return null;
 	}
 
 
@@ -468,12 +509,25 @@ public class Synchronizer {
 					byte[] peersLastBlockSignature = peerChainTipData.getLastBlockSignature();
 
 					byte[] ourLastBlockSignature = ourLatestBlockData.getSignature();
-					LOGGER.debug(String.format("Synchronizing with peer %s at height %d, sig %.8s, ts %d; our height %d, sig %.8s, ts %d", peer,
+					String syncString = String.format("Synchronizing with peer %s at height %d, sig %.8s, ts %d; our height %d, sig %.8s, ts %d", peer,
 							peerHeight, Base58.encode(peersLastBlockSignature), peer.getChainTipData().getLastBlockTimestamp(),
-							ourInitialHeight, Base58.encode(ourLastBlockSignature), ourLatestBlockData.getTimestamp()));
+							ourInitialHeight, Base58.encode(ourLastBlockSignature), ourLatestBlockData.getTimestamp());
+
+					// If our latest block is very old, we should log that we're attempting to sync with a peer
+					// Otherwise, it can appear as though nothing is happening for a while after launch
+					final Long minLatestBlockTimestamp = Controller.getMinimumLatestBlockTimestamp();
+					if (minLatestBlockTimestamp != null && ourLatestBlockData.getTimestamp() < minLatestBlockTimestamp) {
+						LOGGER.info(syncString);
+					}
+					else {
+						LOGGER.debug(syncString);
+					}
+
+					// Reset last re-org size as we are starting a new sync round
+					this.lastReorgSize = 0;
 
 					List<BlockSummaryData> peerBlockSummaries = new ArrayList<>();
-					SynchronizationResult findCommonBlockResult = fetchSummariesFromCommonBlock(repository, peer, ourInitialHeight, force, peerBlockSummaries);
+					SynchronizationResult findCommonBlockResult = fetchSummariesFromCommonBlock(repository, peer, ourInitialHeight, force, peerBlockSummaries, true);
 					if (findCommonBlockResult != SynchronizationResult.OK) {
 						// Logging performed by fetchSummariesFromCommonBlock() above
 						// Clear our common block cache for this peer
@@ -529,10 +583,19 @@ public class Synchronizer {
 					// Commit
 					repository.saveChanges();
 
+					// Create string for logging
 					final BlockData newLatestBlockData = repository.getBlockRepository().getLastBlock();
-					LOGGER.info(String.format("Synchronized with peer %s to height %d, sig %.8s, ts: %d", peer,
+					String syncLog = String.format("Synchronized with peer %s to height %d, sig %.8s, ts: %d", peer,
 							newLatestBlockData.getHeight(), Base58.encode(newLatestBlockData.getSignature()),
-							newLatestBlockData.getTimestamp()));
+							newLatestBlockData.getTimestamp());
+
+					// Append re-org info
+					if (this.lastReorgSize > 0) {
+						syncLog = syncLog.concat(String.format(", size: %d", this.lastReorgSize));
+					}
+
+					// Log sync info
+					LOGGER.info(syncLog);
 
 					return SynchronizationResult.OK;
 				} finally {
@@ -555,7 +618,7 @@ public class Synchronizer {
 	 * @throws DataException
 	 * @throws InterruptedException
 	 */
-	public SynchronizationResult fetchSummariesFromCommonBlock(Repository repository, Peer peer, int ourHeight, boolean force, List<BlockSummaryData> blockSummariesFromCommon) throws DataException, InterruptedException {
+	public SynchronizationResult fetchSummariesFromCommonBlock(Repository repository, Peer peer, int ourHeight, boolean force, List<BlockSummaryData> blockSummariesFromCommon, boolean infoLogWhenNotFound) throws DataException, InterruptedException {
 		// Start by asking for a few recent block hashes as this will cover a majority of reorgs
 		// Failing that, back off exponentially
 		int step = INITIAL_BLOCK_STEP;
@@ -584,8 +647,12 @@ public class Synchronizer {
 			blockSummariesBatch = this.getBlockSummaries(peer, testSignature, step);
 
 			if (blockSummariesBatch == null) {
+				if (infoLogWhenNotFound)
+					LOGGER.info(String.format("Error while trying to find common block with peer %s", peer));
+				else
+					LOGGER.debug(String.format("Error while trying to find common block with peer %s", peer));
+				
 				// No response - give up this time
-				LOGGER.info(String.format("Error while trying to find common block with peer %s", peer));
 				return SynchronizationResult.NO_REPLY;
 			}
 
@@ -703,7 +770,7 @@ public class Synchronizer {
 			populateBlockSummariesMinterLevels(repository, ourBlockSummaries);
 			populateBlockSummariesMinterLevels(repository, peerBlockSummaries);
 
-			final int mutualHeight = commonBlockHeight - 1 + Math.min(ourBlockSummaries.size(), peerBlockSummaries.size());
+			final int mutualHeight = commonBlockHeight + Math.min(ourBlockSummaries.size(), peerBlockSummaries.size());
 
 			// Calculate cumulative chain weights of both blockchain subsets, from common block to highest mutual block.
 			BigInteger ourChainWeight = Block.calcChainWeight(commonBlockHeight, commonBlockSig, ourBlockSummaries, mutualHeight);
@@ -733,6 +800,7 @@ public class Synchronizer {
 
 		LOGGER.debug(() -> String.format("Fetching peer %s chain from height %d, sig %.8s", peer, commonBlockHeight, commonBlockSig58));
 
+		final int maxRetries = Settings.getInstance().getMaxRetries();
 
 		// Overall plan: fetch peer's blocks first, then orphan, then apply
 
@@ -771,18 +839,12 @@ public class Synchronizer {
 					if (cachedCommonBlockData != null)
 						cachedCommonBlockData.setBlockSummariesAfterCommonBlock(null);
 
-                    // If we have already received recent or newer blocks from this peer, go ahead and apply them
+                    // If we have already received newer blocks from this peer that what we have already, go ahead and apply them
                     if (peerBlocks.size() > 0) {
 						final BlockData ourLatestBlockData = repository.getBlockRepository().getLastBlock();
                     	final Block peerLatestBlock = peerBlocks.get(peerBlocks.size() - 1);
 						final Long minLatestBlockTimestamp = Controller.getMinimumLatestBlockTimestamp();
 						if (ourLatestBlockData != null && peerLatestBlock != null && minLatestBlockTimestamp != null) {
-
-							// If we have received at least one recent block, we can apply them
-							if (peerLatestBlock.getBlockData().getTimestamp() > minLatestBlockTimestamp) {
-								LOGGER.debug("Newly received blocks are recent, so we will apply them");
-								break;
-							}
 
 							// If our latest block is very old....
 							if (ourLatestBlockData.getTimestamp() < minLatestBlockTimestamp) {
@@ -799,7 +861,7 @@ public class Synchronizer {
 							}
 						}
                     }
-                    // Otherwise, give up and move on to the next peer, to avoid putting our chain into an outdated state
+					// Otherwise, give up and move on to the next peer, to avoid putting our chain into an outdated or incomplete state
                     return SynchronizationResult.NO_REPLY;
                 }
 
@@ -822,20 +884,13 @@ public class Synchronizer {
 				LOGGER.info(String.format("Peer %s failed to respond with block for height %d, sig %.8s", peer,
 						nextHeight, Base58.encode(nextPeerSignature)));
 
-				if (retryCount >= MAXIMUM_RETRIES) {
-
-					// If we have already received recent or newer blocks from this peer, go ahead and apply them
+				if (retryCount >= maxRetries) {
+					// If we have already received newer blocks from this peer that what we have already, go ahead and apply them
 					if (peerBlocks.size() > 0) {
 						final BlockData ourLatestBlockData = repository.getBlockRepository().getLastBlock();
 						final Block peerLatestBlock = peerBlocks.get(peerBlocks.size() - 1);
 						final Long minLatestBlockTimestamp = Controller.getMinimumLatestBlockTimestamp();
 						if (ourLatestBlockData != null && peerLatestBlock != null && minLatestBlockTimestamp != null) {
-
-							// If we have received at least one recent block, we can apply them
-							if (peerLatestBlock.getBlockData().getTimestamp() > minLatestBlockTimestamp) {
-								LOGGER.debug("Newly received blocks are recent, so we will apply them");
-								break;
-							}
 
 							// If our latest block is very old....
 							if (ourLatestBlockData.getTimestamp() < minLatestBlockTimestamp) {
@@ -852,7 +907,7 @@ public class Synchronizer {
 							}
 						}
 					}
-					// Otherwise, give up and move on to the next peer, to avoid putting our chain into an outdated state
+					// Otherwise, give up and move on to the next peer, to avoid putting our chain into an outdated or incomplete state
 					return SynchronizationResult.NO_REPLY;
 
 				} else {
@@ -860,9 +915,9 @@ public class Synchronizer {
 					peerBlockSignatures.clear();
 					numberSignaturesRequired = peerHeight - height;
 
-					// Retry until retryCount reaches MAXIMUM_RETRIES
+					// Retry until retryCount reaches maxRetries
 					retryCount++;
-					int triesRemaining = MAXIMUM_RETRIES - retryCount;
+					int triesRemaining = maxRetries - retryCount;
 					LOGGER.info(String.format("Re-issuing request to peer %s (%d attempt%s remaining)", peer, triesRemaining, (triesRemaining != 1 ? "s" : "")));
 					continue;
 				}
@@ -894,6 +949,7 @@ public class Synchronizer {
 		// Unwind to common block (unless common block is our latest block)
 		int ourHeight = ourInitialHeight;
 		LOGGER.debug(String.format("Orphaning blocks back to common block height %d, sig %.8s. Our height: %d", commonBlockHeight, commonBlockSig58, ourHeight));
+		int reorgSize = ourHeight - commonBlockHeight;
 
 		BlockData orphanBlockData = repository.getBlockRepository().fromHeight(ourInitialHeight);
 		while (ourHeight > commonBlockHeight) {
@@ -942,6 +998,7 @@ public class Synchronizer {
 			Controller.getInstance().onNewBlock(newBlock.getBlockData());
 		}
 
+		this.lastReorgSize = reorgSize;
 		return SynchronizationResult.OK;
 	}
 
