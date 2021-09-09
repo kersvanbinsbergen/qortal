@@ -1104,6 +1104,10 @@ public class Block {
 				// Apply fix for block 536140 but fix will be rolled back before we exit method
 				Block536140.processFix(this);
 			}
+			else if (this.blockData.getHeight() == 541334) {
+				// Apply fix for block 541334 but fix will be rolled back before we exit method
+				Block541334.processFix(this);
+			}
 
 			for (Transaction transaction : this.getTransactions()) {
 				TransactionData transactionData = transaction.getTransactionData();
