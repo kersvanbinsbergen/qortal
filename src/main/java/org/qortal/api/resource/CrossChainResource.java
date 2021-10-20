@@ -269,7 +269,7 @@ public class CrossChainResource {
 					description = "Display price in terms of foreign currency per unit QORT",
 					example = "false",
 					schema = @Schema(type = "boolean", defaultValue = "false")
-			) @QueryParam("inverseprice") Boolean inverseprice) {
+			) @QueryParam("inverse") Boolean inverse) {
 		// foreignBlockchain is required
 		if (foreignBlockchain == null)
 			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_CRITERIA);
@@ -300,8 +300,7 @@ public class CrossChainResource {
 				}
 			}
 
-			long priceEstimate = inverseprice ? Amounts.scaledDivide(totalForeign, totalQort) : Amounts.scaledDivide(totalQort, totalForeign);
-			return priceEstimate;
+			return inverse ? Amounts.scaledDivide(totalForeign, totalQort) : Amounts.scaledDivide(totalQort, totalForeign);
 		} catch (DataException e) {
 			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.REPOSITORY_ISSUE, e);
 		}
