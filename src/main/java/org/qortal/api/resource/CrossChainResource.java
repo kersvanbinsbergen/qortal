@@ -267,7 +267,7 @@ public class CrossChainResource {
 			) @QueryParam("maxtrades") Integer maxtrades,
 			@Parameter(
 					description = "Display price in terms of foreign currency per unit QORT",
-					example = "true",
+					example = "false",
 					schema = @Schema(type = "boolean", defaultValue = "false")
 			) @QueryParam("inverseprice") Boolean inverseprice) {
 		// foreignBlockchain is required
