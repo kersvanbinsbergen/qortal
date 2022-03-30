@@ -1,6 +1,7 @@
 package org.qortal.api.resource;
 
 import com.google.common.primitives.Ints;
+import io.druid.extendedset.intset.ConciseSet;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -38,6 +39,7 @@ import org.qortal.block.Block;
 import org.qortal.controller.Controller;
 import org.qortal.crypto.Crypto;
 import org.qortal.data.account.AccountData;
+import org.qortal.data.account.RewardShareData;
 import org.qortal.data.block.BlockData;
 import org.qortal.data.block.BlockSummaryData;
 import org.qortal.data.transaction.TransactionData;
@@ -48,6 +50,7 @@ import org.qortal.repository.RepositoryManager;
 import org.qortal.transform.TransformationException;
 import org.qortal.transform.block.BlockTransformer;
 import org.qortal.utils.Base58;
+import org.roaringbitmap.IntIterator;
 
 @Path("/blocks")
 @Tag(name = "Blocks")
@@ -738,6 +741,9 @@ public class BlocksResource {
 		}
 	}
 
+
+
+
 	@GET
 	@Path("/summaries")
 	@Operation(
@@ -847,4 +853,46 @@ public class BlocksResource {
 		}
 	}
 
+
+	@GET
+	@Path("/onlineaccounts/decode/")
+	@Operation(
+			summary = "Fetch reward shares using compressed base58 encoded online accounts data",
+			responses = {
+					@ApiResponse(
+							description = "Reward Shares",
+							content = @Content(
+									array = @ArraySchema(
+											schema = @Schema(
+													implementation = BlockSummaryData.class
+											)
+									)
+							)
+					)
+			}
+	)
+	public List<RewardShareData> DecodeAndFetchOnlineAccounts(@QueryParam("B58 Encoded online accounts") String Encoded)
+	{
+		byte[] encodedOnlineAccounts = Base58.decode(Encoded);
+
+		ConciseSet accountIndexes = BlockTransformer.decodeOnlineAccounts(encodedOnlineAccounts);
+
+		List<RewardShareData> blockRewardShares = new ArrayList<RewardShareData>();
+
+		IntIterator iterator = accountIndexes.iterator();
+
+		try (final Repository repository = RepositoryManager.getRepository()) {
+			iterator = accountIndexes.iterator();
+			while (iterator.hasNext()) {
+				int accountIndex = iterator.next();
+
+				RewardShareData rewardShareData = repository.getAccountRepository().getRewardShareByIndex(accountIndex);
+
+				blockRewardShares.add(rewardShareData);
+			}
+			return blockRewardShares;
+		} catch (DataException e) {
+			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.REPOSITORY_ISSUE, e);
+		}
+	}
 }
