@@ -231,8 +231,51 @@ public class OnlineAccountsManager extends Thread {
                 LOGGER.trace(() -> String.format("Added online account %s with timestamp %d", otherAccount.getAddress(), onlineAccountData.getTimestamp()));
             }
 
+            // Remove existing version of this online account data if the new one is superior
+            if (isOnlineAccountsDataSuperior(onlineAccountData)) {
+                this.onlineAccounts.remove(onlineAccountData);
+            }
+
             this.onlineAccounts.add(onlineAccountData);
         }
+    }
+
+    /**
+     * Check if supplied onlineAccountData is superior (i.e. has a nonce value) than existing record.
+     * Two entries are considered equal even if the nonce and block signature differ, to prevent
+     * multiple variations co-existing. For this reason, we need to be able to check
+     * if a new OnlineAccountData should replace the existing one, which may be missing the nonce.
+     * @param onlineAccountData
+     * @return
+     */
+    private boolean isOnlineAccountsDataSuperior(OnlineAccountData onlineAccountData) {
+        if (onlineAccountData.getNonces() == null || onlineAccountData.getNonces().isEmpty()) {
+            // New online account data has no nonce value(s), so it won't be better than anything we already have
+            return false;
+        }
+
+        // New online account data has nonce value(s), so we need to check if the existing one does
+        OnlineAccountData existingOnlineAccountData = null;
+        for (OnlineAccountData acc : this.onlineAccounts) {
+            if (acc.equals(onlineAccountData)) {
+                // Found existing online account data
+                existingOnlineAccountData = acc;
+                break;
+            }
+        }
+
+        if (existingOnlineAccountData == null) {
+            // No existing online accounts data, so nothing to compare
+            return false;
+        }
+
+        if (existingOnlineAccountData.getNonces() == null || existingOnlineAccountData.getNonces().isEmpty()) {
+            // Existing data has no nonce value(s) so we want to replace it with the new one
+            return true;
+        }
+
+        // Both new and old data have nonce values so the new data isn't considered superior
+        return false;
     }
 
     public void ensureTestingAccountsOnline(PrivateKeyAccount... onlineAccounts) {
@@ -648,7 +691,12 @@ public class OnlineAccountsManager extends Thread {
 
             // Do we already know about this online account data?
             if (onlineAccounts.contains(onlineAccountData)) {
-                continue;
+
+                // Don't import if it's no better than the one we already have
+                if (!isOnlineAccountsDataSuperior(onlineAccountData)) {
+                    // Do NOT remove the existing online account data - this takes place after validation
+                    continue;
+                }
             }
 
             // Is it already in the import queue?
