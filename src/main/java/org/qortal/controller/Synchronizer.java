@@ -235,6 +235,9 @@ public class Synchronizer extends Thread {
 		// Disregard peers that are on the same block as last sync attempt and we didn't like their chain
 		peers.removeIf(Controller.hasInferiorChainTip);
 
+		// Remove peers with unknown height, lower height or same height and same block signature (unless we don't have their block signature)
+		peers.removeIf(Controller.hasShorterBlockchain);
+
 		final int peersBeforeComparison = peers.size();
 
 		// Request recent block summaries from the remaining peers, and locate our common block with each
@@ -314,7 +317,7 @@ public class Synchronizer extends Thread {
 
 				case INFERIOR_CHAIN: {
 					// Update our list of inferior chain tips
-					ByteArray inferiorChainSignature = new ByteArray(peer.getChainTipData().getLastBlockSignature());
+					ByteArray inferiorChainSignature = ByteArray.wrap(peer.getChainTipData().getLastBlockSignature());
 					if (!inferiorChainSignatures.contains(inferiorChainSignature))
 						inferiorChainSignatures.add(inferiorChainSignature);
 
@@ -343,7 +346,7 @@ public class Synchronizer extends Thread {
 					// fall-through...
 				case NOTHING_TO_DO: {
 					// Update our list of inferior chain tips
-					ByteArray inferiorChainSignature = new ByteArray(peer.getChainTipData().getLastBlockSignature());
+					ByteArray inferiorChainSignature = ByteArray.wrap(peer.getChainTipData().getLastBlockSignature());
 					if (!inferiorChainSignatures.contains(inferiorChainSignature))
 						inferiorChainSignatures.add(inferiorChainSignature);
 
@@ -419,7 +422,7 @@ public class Synchronizer extends Thread {
 
 	public void addInferiorChainSignature(byte[] inferiorSignature) {
 		// Update our list of inferior chain tips
-		ByteArray inferiorChainSignature = new ByteArray(inferiorSignature);
+		ByteArray inferiorChainSignature = ByteArray.wrap(inferiorSignature);
 		if (!inferiorChainSignatures.contains(inferiorChainSignature))
 			inferiorChainSignatures.add(inferiorChainSignature);
 	}
