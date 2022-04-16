@@ -1171,10 +1171,6 @@ public class Controller extends Thread {
 				OnlineAccountsManager.getInstance().onNetworkOnlineAccountsV2Message(peer, message);
 				break;
 
-			case GET_ONLINE_ACCOUNTS_V3:
-				OnlineAccountsManager.getInstance().onNetworkGetOnlineAccountsV3Message(peer, message);
-				break;
-
 			case ONLINE_ACCOUNTS_V3:
 				OnlineAccountsManager.getInstance().onNetworkOnlineAccountsV3Message(peer, message);
 				break;

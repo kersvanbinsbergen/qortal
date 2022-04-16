@@ -337,12 +337,7 @@ public class OnlineAccountsManager extends Thread {
                 safeOnlineAccounts = new ArrayList<>(this.onlineAccounts);
             }
 
-            Message messageV2 = new GetOnlineAccountsV2Message(safeOnlineAccounts);
-            Message messageV3 = new GetOnlineAccountsV3Message(safeOnlineAccounts);
-
-            Network.getInstance().broadcast(peer ->
-                    peer.getPeersVersion() >= ONLINE_ACCOUNTS_V3_PEER_VERSION ? messageV3 : messageV2
-            );
+            Network.getInstance().broadcast(peer -> new GetOnlineAccountsV2Message(safeOnlineAccounts));
         }
     }
 
@@ -672,8 +667,10 @@ public class OnlineAccountsManager extends Thread {
             }
         }
 
-        Message onlineAccountsMessage = new OnlineAccountsV2Message(accountsToSend);
-        peer.sendMessage(onlineAccountsMessage);
+        Message messageV2 = new OnlineAccountsV2Message(accountsToSend);
+        Message messageV3 = new OnlineAccountsV3Message(accountsToSend);
+
+        peer.sendMessage(peer.getPeersVersion() >= ONLINE_ACCOUNTS_V3_PEER_VERSION ? messageV3 : messageV2);
 
         LOGGER.trace(() -> String.format("Sent %d of our %d online accounts to %s", accountsToSend.size(), this.onlineAccounts.size(), peer));
     }
@@ -709,39 +706,6 @@ public class OnlineAccountsManager extends Thread {
         }
 
         LOGGER.debug(String.format("Added %d online accounts to queue", importCount));
-    }
-
-    public void onNetworkGetOnlineAccountsV3Message(Peer peer, Message message) {
-        GetOnlineAccountsV3Message getOnlineAccountsMessage = (GetOnlineAccountsV3Message) message;
-
-        List<OnlineAccountData> excludeAccounts = getOnlineAccountsMessage.getOnlineAccounts();
-
-        // Send online accounts info, excluding entries with matching timestamp & public key from excludeAccounts
-        List<OnlineAccountData> accountsToSend;
-        synchronized (this.onlineAccounts) {
-            accountsToSend = new ArrayList<>(this.onlineAccounts);
-        }
-
-        Iterator<OnlineAccountData> iterator = accountsToSend.iterator();
-
-        SEND_ITERATOR:
-        while (iterator.hasNext()) {
-            OnlineAccountData onlineAccountData = iterator.next();
-
-            for (int i = 0; i < excludeAccounts.size(); ++i) {
-                OnlineAccountData excludeAccountData = excludeAccounts.get(i);
-
-                if (onlineAccountData.getTimestamp() == excludeAccountData.getTimestamp() && Arrays.equals(onlineAccountData.getPublicKey(), excludeAccountData.getPublicKey())) {
-                    iterator.remove();
-                    continue SEND_ITERATOR;
-                }
-            }
-        }
-
-        Message onlineAccountsMessage = new OnlineAccountsV3Message(accountsToSend);
-        peer.sendMessage(onlineAccountsMessage);
-
-        LOGGER.trace(() -> String.format("Sent %d of our %d online accounts to %s", accountsToSend.size(), this.onlineAccounts.size(), peer));
     }
 
     public void onNetworkOnlineAccountsV3Message(Peer peer, Message message) {
