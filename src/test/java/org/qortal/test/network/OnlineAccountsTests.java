@@ -49,7 +49,7 @@ public class OnlineAccountsTests extends Common {
 
 
     @Test
-    public void testGetOnlineAccountsV2() throws Message.MessageException {
+    public void testGetOnlineAccountsV2() throws MessageException {
         List<OnlineAccountData> onlineAccountsOut = generateOnlineAccounts(false);
 
         Message messageOut = new GetOnlineAccountsV2Message(onlineAccountsOut);
@@ -66,7 +66,7 @@ public class OnlineAccountsTests extends Common {
     }
 
     @Test
-    public void testOnlineAccountsV2() throws Message.MessageException {
+    public void testOnlineAccountsV2() throws MessageException {
         List<OnlineAccountData> onlineAccountsOut = generateOnlineAccounts(true);
 
         Message messageOut = new OnlineAccountsV2Message(onlineAccountsOut);

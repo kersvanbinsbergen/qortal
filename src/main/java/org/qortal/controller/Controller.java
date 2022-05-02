@@ -58,6 +58,7 @@ import org.qortal.repository.hsqldb.HSQLDBRepositoryFactory;
 import org.qortal.settings.Settings;
 import org.qortal.transaction.Transaction;
 import org.qortal.transaction.Transaction.TransactionType;
+import org.qortal.transform.TransformationException;
 import org.qortal.utils.*;
 
 public class Controller extends Thread {
@@ -573,15 +574,20 @@ public class Controller extends Thread {
 								MessageType.INFO);
 
 					LOGGER.info("Starting scheduled repository maintenance. This can take a while...");
-					try (final Repository repository = RepositoryManager.getRepository()) {
+					int attempts = 0;
+					while (attempts <= 5) {
+						try (final Repository repository = RepositoryManager.getRepository()) {
+							attempts++;
 
-						// Timeout if the database isn't ready for maintenance after 60 seconds
-						long timeout = 60 * 1000L;
-						repository.performPeriodicMaintenance(timeout);
+							// Timeout if the database isn't ready for maintenance after 60 seconds
+							long timeout = 60 * 1000L;
+							repository.performPeriodicMaintenance(timeout);
 
-						LOGGER.info("Scheduled repository maintenance completed");
-					} catch (DataException | TimeoutException e) {
-						LOGGER.error("Scheduled repository maintenance failed", e);
+							LOGGER.info("Scheduled repository maintenance completed");
+							break;
+						} catch (DataException | TimeoutException e) {
+							LOGGER.info("Scheduled repository maintenance failed. Retrying up to 5 times...", e);
+						}
 					}
 
 					// Get a new random interval
@@ -653,29 +659,6 @@ public class Controller extends Thread {
 	public static final Predicate<Peer> hasMisbehaved = peer -> {
 		final Long lastMisbehaved = peer.getPeerData().getLastMisbehaved();
 		return lastMisbehaved != null && lastMisbehaved > NTP.getTime() - MISBEHAVIOUR_COOLOFF;
-	};
-
-	/** True if peer has unknown height, lower height or same height and same block signature (unless we don't have their block signature). */
-	public static Predicate<Peer> hasShorterBlockchain = peer -> {
-		BlockData highestBlockData = getInstance().getChainTip();
-		int ourHeight = highestBlockData.getHeight();
-		final PeerChainTipData peerChainTipData = peer.getChainTipData();
-
-		// Ensure we have chain tip data for this peer
-		if (peerChainTipData == null)
-			return true;
-
-		// Remove if peer is at a lower height than us
-		Integer peerHeight = peerChainTipData.getLastHeight();
-		if (peerHeight == null || peerHeight < ourHeight)
-			return true;
-
-		// Don't remove if peer is on a greater height chain than us, or if we don't have their block signature
-		if (peerHeight > ourHeight || peerChainTipData.getLastBlockSignature() == null)
-			return false;
-
-		// Remove if signatures match
-		return Arrays.equals(peerChainTipData.getLastBlockSignature(), highestBlockData.getSignature());
 	};
 
 	public static final Predicate<Peer> hasNoRecentBlock = peer -> {
@@ -1232,7 +1215,7 @@ public class Controller extends Thread {
 			this.stats.getBlockMessageStats.cacheHits.incrementAndGet();
 
 			// We need to duplicate it to prevent multiple threads setting ID on the same message
-			CachedBlockMessage clonedBlockMessage = cachedBlockMessage.cloneWithNewId(message.getId());
+			CachedBlockMessage clonedBlockMessage = Message.cloneWithNewId(cachedBlockMessage, message.getId());
 
 			if (!peer.sendMessage(clonedBlockMessage))
 				peer.disconnect("failed to send block");
@@ -1291,7 +1274,6 @@ public class Controller extends Thread {
 			CachedBlockMessage blockMessage = new CachedBlockMessage(block);
 			blockMessage.setId(message.getId());
 
-			// This call also causes the other needed data to be pulled in from repository
 			if (!peer.sendMessage(blockMessage)) {
 				peer.disconnect("failed to send block");
 				// Don't fall-through to caching because failure to send might be from failure to build message
@@ -1305,7 +1287,9 @@ public class Controller extends Thread {
 				this.blockMessageCache.put(ByteArray.wrap(blockData.getSignature()), blockMessage);
 			}
 		} catch (DataException e) {
-			LOGGER.error(String.format("Repository issue while send block %s to peer %s", Base58.encode(signature), peer), e);
+			LOGGER.error(String.format("Repository issue while sending block %s to peer %s", Base58.encode(signature), peer), e);
+		} catch (TransformationException e) {
+			LOGGER.error(String.format("Serialization issue while sending block %s to peer %s", Base58.encode(signature), peer), e);
 		}
 	}
 

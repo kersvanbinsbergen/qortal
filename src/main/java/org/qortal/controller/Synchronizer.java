@@ -33,7 +33,7 @@ import org.qortal.network.message.GetBlockSummariesMessage;
 import org.qortal.network.message.GetSignaturesV2Message;
 import org.qortal.network.message.Message;
 import org.qortal.network.message.SignaturesMessage;
-import org.qortal.network.message.Message.MessageType;
+import org.qortal.network.message.MessageType;
 import org.qortal.repository.DataException;
 import org.qortal.repository.Repository;
 import org.qortal.repository.RepositoryManager;
@@ -234,9 +234,6 @@ public class Synchronizer extends Thread {
 
 		// Disregard peers that are on the same block as last sync attempt and we didn't like their chain
 		peers.removeIf(Controller.hasInferiorChainTip);
-
-		// Remove peers with unknown height, lower height or same height and same block signature (unless we don't have their block signature)
-		peers.removeIf(Controller.hasShorterBlockchain);
 
 		final int peersBeforeComparison = peers.size();
 
