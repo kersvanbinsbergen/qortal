@@ -7,7 +7,6 @@ import org.qortal.transform.Transformer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,7 +23,63 @@ public class OnlineAccountsV3Message extends Message {
 	private byte[] cachedData;
 
 	public OnlineAccountsV3Message(List<OnlineAccountData> onlineAccounts) {
-		this(-1, onlineAccounts);
+		super(MessageType.ONLINE_ACCOUNTS_V3);
+
+		// If we don't have ANY online accounts then it's an easier construction...
+		if (onlineAccounts.isEmpty()) {
+			// Always supply a number of accounts
+			this.dataBytes = Ints.toByteArray(0);
+			this.checksumBytes = Message.generateChecksum(this.dataBytes);
+			return;
+		}
+
+		// How many of each timestamp
+		Map<Long, Integer> countByTimestamp = new HashMap<>();
+
+		for (int i = 0; i < onlineAccounts.size(); ++i) {
+			OnlineAccountData onlineAccountData = onlineAccounts.get(i);
+			Long timestamp = onlineAccountData.getTimestamp();
+			countByTimestamp.compute(timestamp, (k, v) -> v == null ? 1 : ++v);
+		}
+
+		// We should know exactly how many bytes to allocate now
+		int byteSize = countByTimestamp.size() * (Transformer.INT_LENGTH + Transformer.TIMESTAMP_LENGTH)
+				+ onlineAccounts.size() * (Transformer.SIGNATURE_LENGTH + Transformer.PUBLIC_KEY_LENGTH);
+
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream(byteSize);
+
+		try {
+			for (long timestamp : countByTimestamp.keySet()) {
+				bytes.write(Ints.toByteArray(countByTimestamp.get(timestamp)));
+
+				bytes.write(Longs.toByteArray(timestamp));
+
+				for (int i = 0; i < onlineAccounts.size(); ++i) {
+					OnlineAccountData onlineAccountData = onlineAccounts.get(i);
+
+					if (onlineAccountData.getTimestamp() == timestamp) {
+						bytes.write(onlineAccountData.getSignature());
+
+						bytes.write(onlineAccountData.getPublicKey());
+
+						bytes.write(onlineAccountData.getReducedBlockSignature());
+
+						int nonceCount = onlineAccountData.getNonces() != null ? onlineAccountData.getNonces().size() : 0;
+						bytes.write(Ints.toByteArray(nonceCount));
+
+						for (int n = 0; n < nonceCount; ++n) {
+							int nonce = onlineAccountData.getNonces().get(n);
+							bytes.write(Ints.toByteArray(nonce));
+						}
+					}
+				}
+			}
+		} catch (IOException e) {
+			throw new AssertionError("IOException shouldn't occur with ByteArrayOutputStream");
+		}
+
+		this.dataBytes = bytes.toByteArray();
+		this.checksumBytes = Message.generateChecksum(this.dataBytes);
 	}
 
 	private OnlineAccountsV3Message(int id, List<OnlineAccountData> onlineAccounts) {
@@ -37,7 +92,7 @@ public class OnlineAccountsV3Message extends Message {
 		return this.onlineAccounts;
 	}
 
-	public static Message fromByteBuffer(int id, ByteBuffer bytes) throws UnsupportedEncodingException {
+	public static Message fromByteBuffer(int id, ByteBuffer bytes) {
 		int accountCount = bytes.getInt();
 
 		List<OnlineAccountData> onlineAccounts = new ArrayList<>(accountCount);
@@ -74,66 +129,6 @@ public class OnlineAccountsV3Message extends Message {
 		}
 
 		return new OnlineAccountsV3Message(id, onlineAccounts);
-	}
-
-	@Override
-	protected synchronized byte[] toData() {
-		if (this.cachedData != null)
-			return this.cachedData;
-
-		// Shortcut in case we have no online accounts
-		if (this.onlineAccounts.isEmpty()) {
-			this.cachedData = Ints.toByteArray(0);
-			return this.cachedData;
-		}
-
-		// How many of each timestamp
-		Map<Long, Integer> countByTimestamp = new HashMap<>();
-
-		for (int i = 0; i < this.onlineAccounts.size(); ++i) {
-			OnlineAccountData onlineAccountData = this.onlineAccounts.get(i);
-			Long timestamp = onlineAccountData.getTimestamp();
-			countByTimestamp.compute(timestamp, (k, v) -> v == null ? 1 : ++v);
-		}
-
-		// We should know exactly how many bytes to allocate now
-		int byteSize = countByTimestamp.size() * (Transformer.INT_LENGTH + Transformer.TIMESTAMP_LENGTH)
-				+ this.onlineAccounts.size() * (Transformer.SIGNATURE_LENGTH + Transformer.PUBLIC_KEY_LENGTH);
-
-		try {
-			ByteArrayOutputStream bytes = new ByteArrayOutputStream(byteSize);
-
-			for (long timestamp : countByTimestamp.keySet()) {
-				bytes.write(Ints.toByteArray(countByTimestamp.get(timestamp)));
-
-				bytes.write(Longs.toByteArray(timestamp));
-
-				for (int i = 0; i < this.onlineAccounts.size(); ++i) {
-					OnlineAccountData onlineAccountData = this.onlineAccounts.get(i);
-
-					if (onlineAccountData.getTimestamp() == timestamp) {
-						bytes.write(onlineAccountData.getSignature());
-
-						bytes.write(onlineAccountData.getPublicKey());
-
-						bytes.write(onlineAccountData.getReducedBlockSignature());
-
-						int nonceCount = onlineAccountData.getNonces() != null ? onlineAccountData.getNonces().size() : 0;
-						bytes.write(Ints.toByteArray(nonceCount));
-
-						for (int n = 0; n < nonceCount; ++n) {
-							int nonce = onlineAccountData.getNonces().get(n);
-							bytes.write(Ints.toByteArray(nonce));
-						}
-					}
-				}
-			}
-
-			this.cachedData = bytes.toByteArray();
-			return this.cachedData;
-		} catch (IOException e) {
-			return null;
-		}
 	}
 
 }
