@@ -18,6 +18,7 @@ public enum MessageType {
     HEIGHT_V2(10, HeightV2Message::fromByteBuffer),
     PING(11, PingMessage::fromByteBuffer),
     PONG(12, PongMessage::fromByteBuffer),
+    HEIGHT_V3(13, HeightV3Message::fromByteBuffer),
 
     // Requesting data
     PEERS_V2(20, PeersV2Message::fromByteBuffer),

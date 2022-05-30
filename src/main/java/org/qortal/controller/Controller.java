@@ -1197,6 +1197,10 @@ public class Controller extends Thread {
 				onNetworkHeightV2Message(peer, message);
 				break;
 
+			case HEIGHT_V3:
+				onNetworkHeightV3Message(peer, message);
+				break;
+
 			case GET_TRANSACTION:
 				TransactionImporter.getInstance().onNetworkGetTransactionMessage(peer, message);
 				break;
@@ -1531,6 +1535,27 @@ public class Controller extends Thread {
 
 		// Update peer chain tip data
 		PeerChainTipData newChainTipData = new PeerChainTipData(heightV2Message.getHeight(), heightV2Message.getSignature(), heightV2Message.getTimestamp(), heightV2Message.getMinterPublicKey());
+		peer.setChainTipData(newChainTipData);
+
+		// Potentially synchronize
+		Synchronizer.getInstance().requestSync();
+	}
+
+	private void onNetworkHeightV3Message(Peer peer, Message message) {
+		HeightV3Message heightV3Message = (HeightV3Message) message;
+
+		if (!Settings.getInstance().isLite()) {
+			// If peer is inbound and we've not updated their height
+			// then this is probably their initial HEIGHT_V3 message
+			// so they need a corresponding HEIGHT_V3 message from us
+			if (!peer.isOutbound() && (peer.getChainTipData() == null || peer.getChainTipData().getLastHeight() == null))
+				peer.sendMessage(Network.getInstance().buildHeightMessage(peer, getChainTip()));
+		}
+
+		// Update peer chain tip data
+		PeerChainTipData newChainTipData = new PeerChainTipData(heightV3Message.getHeight(), heightV3Message.getSignature(),
+				heightV3Message.getReference(), heightV3Message.getTimestamp(), heightV3Message.getMinterPublicKey(),
+				heightV3Message.getOnlineAccountsCount(), heightV3Message.getTransactionCount());
 		peer.setChainTipData(newChainTipData);
 
 		// Potentially synchronize

@@ -1163,9 +1163,25 @@ public class Network {
     }
 
     public Message buildHeightMessage(Peer peer, BlockData blockData) {
+        final long HEIGHT_V3_PEER_VERSION = 0x0300030003L;
+
+        if (peer.getPeersVersion() >= HEIGHT_V3_PEER_VERSION) {
+            return Network.getInstance().buildHeightV3Message(peer, blockData);
+        } else {
+            return Network.getInstance().buildHeightV2Message(peer, blockData);
+        }
+    }
+    private Message buildHeightV2Message(Peer peer, BlockData blockData) {
         // HEIGHT_V2 contains way more useful info
         return new HeightV2Message(blockData.getHeight(), blockData.getSignature(),
                 blockData.getTimestamp(), blockData.getMinterPublicKey());
+    }
+
+    private Message buildHeightV3Message(Peer peer, BlockData blockData) {
+        // HEIGHT_V3 contains even more useful info
+        return new HeightV3Message(blockData.getHeight(), blockData.getSignature(), blockData.getReference(),
+                blockData.getTimestamp(), blockData.getMinterPublicKey(), blockData.getOnlineAccountsCount(),
+                blockData.getTransactionCount());
     }
 
     public Message buildNewTransactionMessage(Peer peer, TransactionData transactionData) {
