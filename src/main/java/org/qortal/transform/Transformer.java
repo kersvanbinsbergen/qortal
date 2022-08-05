@@ -12,6 +12,8 @@ public abstract class Transformer {
 
 	// Raw, not Base58-encoded
 	public static final int ADDRESS_LENGTH = 25;
+	// Base58-encoded
+	public static final int BASE58_ADDRESS_LENGTH = 36;
 
 	public static final int PUBLIC_KEY_LENGTH = 32;
 	public static final int PRIVATE_KEY_LENGTH = 32;

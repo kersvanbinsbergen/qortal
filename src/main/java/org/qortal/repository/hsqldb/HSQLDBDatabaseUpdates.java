@@ -58,7 +58,7 @@ public class HSQLDBDatabaseUpdates {
 	 * @return database version, or 0 if no schema yet
 	 * @throws SQLException
 	 */
-	private static int fetchDatabaseVersion(Connection connection) throws SQLException {
+	protected static int fetchDatabaseVersion(Connection connection) throws SQLException {
 		try (Statement stmt = connection.createStatement()) {
 			if (stmt.execute("SELECT version FROM DatabaseInfo"))
 				try (ResultSet resultSet = stmt.getResultSet()) {

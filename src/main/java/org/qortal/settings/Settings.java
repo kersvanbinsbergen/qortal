@@ -259,6 +259,8 @@ public class Settings {
 	private Long slowQueryThreshold = null;
 	/** Repository storage path. */
 	private String repositoryPath = "db";
+	/** Chat repository storage path. */
+	private String chatRepositoryPath = "chatdb";
 	/** Repository connection pool size. Needs to be a bit bigger than maxNetworkThreadPoolSize */
 	private int repositoryConnectionPoolSize = 100;
 	private List<String> fixedNetwork;
@@ -776,6 +778,10 @@ public class Settings {
 
 	public String getRepositoryPath() {
 		return this.repositoryPath;
+	}
+
+	public String getChatRepositoryPath() {
+		return this.chatRepositoryPath;
 	}
 
 	public int getRepositoryConnectionPoolSize() {

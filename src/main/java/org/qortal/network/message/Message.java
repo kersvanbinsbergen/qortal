@@ -83,6 +83,10 @@ public abstract class Message {
 		return this.type;
 	}
 
+	public byte[] getDataBytes() {
+		return this.dataBytes;
+	}
+
 	/**
 	 * Attempt to read a message from byte buffer.
 	 * 

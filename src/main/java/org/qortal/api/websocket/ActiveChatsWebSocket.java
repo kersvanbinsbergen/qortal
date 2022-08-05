@@ -16,6 +16,7 @@ import org.eclipse.jetty.websocket.servlet.WebSocketServletFactory;
 import org.qortal.controller.ChatNotifier;
 import org.qortal.crypto.Crypto;
 import org.qortal.data.chat.ActiveChats;
+import org.qortal.data.chat.ChatMessage;
 import org.qortal.data.transaction.ChatTransactionData;
 import org.qortal.repository.DataException;
 import org.qortal.repository.Repository;
@@ -43,7 +44,7 @@ public class ActiveChatsWebSocket extends ApiWebSocket {
 
 		AtomicReference<String> previousOutput = new AtomicReference<>(null);
 
-		ChatNotifier.Listener listener = chatTransactionData -> onNotify(session, chatTransactionData, address, previousOutput);
+		ChatNotifier.Listener listener = chatMessage -> onNotify(session, chatMessage, address, previousOutput);
 		ChatNotifier.getInstance().register(session, listener);
 
 		this.onNotify(session, null, address, previousOutput);
@@ -65,12 +66,12 @@ public class ActiveChatsWebSocket extends ApiWebSocket {
 		/* ignored */
 	}
 
-	private void onNotify(Session session, ChatTransactionData chatTransactionData, String ourAddress, AtomicReference<String> previousOutput) {
+	private void onNotify(Session session, ChatMessage chatMessage, String ourAddress, AtomicReference<String> previousOutput) {
 		// If CHAT has a recipient (i.e. direct message, not group-based) and we're neither sender nor recipient, then it's of no interest
-		if (chatTransactionData != null) {
-			String recipient = chatTransactionData.getRecipient();
+		if (chatMessage != null) {
+			String recipient = chatMessage.getRecipient();
 
-			if (recipient != null && (!recipient.equals(ourAddress) && !chatTransactionData.getSender().equals(ourAddress)))
+			if (recipient != null && (!recipient.equals(ourAddress) && !chatMessage.getSender().equals(ourAddress)))
 				return;
 		}
 

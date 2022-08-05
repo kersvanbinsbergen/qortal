@@ -45,9 +45,9 @@ import org.qortal.data.account.AccountBalanceData;
 import org.qortal.data.account.AccountData;
 import org.qortal.data.block.BlockData;
 import org.qortal.data.block.BlockSummaryData;
+import org.qortal.data.chat.ChatMessage;
 import org.qortal.data.naming.NameData;
 import org.qortal.data.network.PeerData;
-import org.qortal.data.transaction.ChatTransactionData;
 import org.qortal.data.transaction.TransactionData;
 import org.qortal.event.Event;
 import org.qortal.event.EventBus;
@@ -57,13 +57,16 @@ import org.qortal.gui.SysTray;
 import org.qortal.network.Network;
 import org.qortal.network.Peer;
 import org.qortal.network.message.*;
+import org.qortal.network.message.GetChatMessagesMessage.Direction;
 import org.qortal.repository.*;
 import org.qortal.repository.hsqldb.HSQLDBRepositoryFactory;
 import org.qortal.settings.Settings;
 import org.qortal.transaction.Transaction;
-import org.qortal.transaction.Transaction.TransactionType;
 import org.qortal.transform.TransformationException;
 import org.qortal.utils.*;
+
+import static org.qortal.network.Network.MAX_CHAT_MESSAGES_PER_REPLY;
+import static org.qortal.repository.hsqldb.HSQLDBRepositoryFactory.HSQLDBRepositoryType.*;
 
 public class Controller extends Thread {
 
@@ -82,6 +85,7 @@ public class Controller extends Thread {
 	private static final int MAX_BLOCKCHAIN_TIP_AGE = 5; // blocks
 	private static final Object shutdownLock = new Object();
 	private static final String repositoryUrlTemplate = "jdbc:hsqldb:file:%s" + File.separator + "blockchain;create=true;hsqldb.full_log_replay=true";
+	private static final String chatRepositoryUrlTemplate = "jdbc:hsqldb:file:%s" + File.separator + "chat;create=true;hsqldb.full_log_replay=true";
 	private static final long NTP_PRE_SYNC_CHECK_PERIOD = 5 * 1000L; // ms
 	private static final long NTP_POST_SYNC_CHECK_PERIOD = 5 * 60 * 1000L; // ms
 	private static final long DELETE_EXPIRED_INTERVAL = 5 * 60 * 1000L; // ms
@@ -230,6 +234,31 @@ public class Controller extends Thread {
 		}
 		public GetNameMessageStats getNameMessageStats = new GetNameMessageStats();
 
+		public static class GetChatMessagesStats {
+			public AtomicLong requests = new AtomicLong();
+
+			public GetChatMessagesStats() {
+			}
+		}
+		public GetChatMessagesStats getChatMessagesStats = new GetChatMessagesStats();
+
+		public static class GetChatMessageStats {
+			public AtomicLong requests = new AtomicLong();
+			public AtomicLong unknownMessages = new AtomicLong();
+
+			public GetChatMessageStats() {
+			}
+		}
+		public GetChatMessageStats getChatMessageStats = new GetChatMessageStats();
+
+		public static class GetRecentChatMessagesStats {
+			public AtomicLong requests = new AtomicLong();
+
+			public GetRecentChatMessagesStats() {
+			}
+		}
+		public GetRecentChatMessagesStats getRecentChatMessagesStats = new GetRecentChatMessagesStats();
+
 		public AtomicLong latestBlocksCacheRefills = new AtomicLong();
 
 		public StatsSnapshot() {
@@ -292,6 +321,10 @@ public class Controller extends Thread {
 
 	public static String getRepositoryUrl() {
 		return String.format(repositoryUrlTemplate, Settings.getInstance().getRepositoryPath());
+	}
+
+	public static String getChatRepositoryUrl() {
+		return String.format(chatRepositoryUrlTemplate, Settings.getInstance().getChatRepositoryPath());
 	}
 
 	public long getBuildTimestamp() {
@@ -397,7 +430,7 @@ public class Controller extends Thread {
 
 		LOGGER.info("Starting repository");
 		try {
-			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(getRepositoryUrl());
+			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(getRepositoryUrl(), MAIN);
 			RepositoryManager.setRepositoryFactory(repositoryFactory);
 			RepositoryManager.setRequestedCheckpoint(Boolean.TRUE);
 
@@ -413,6 +446,24 @@ public class Controller extends Thread {
 			} else {
 				LOGGER.error("Unable to start repository", e);
 				Gui.getInstance().fatalError("Repository issue", e);
+			}
+
+			return; // Not System.exit() so that GUI can display error
+		}
+
+		LOGGER.info("Starting chat repository");
+		try {
+			RepositoryFactory repositoryFactory = new HSQLDBRepositoryFactory(getChatRepositoryUrl(), CHAT);
+			ChatRepositoryManager.setRepositoryFactory(repositoryFactory);
+			ChatRepositoryManager.setRequestedCheckpoint(Boolean.TRUE);
+		} catch (DataException e) {
+			// If exception has no cause then repository is in use by some other process.
+			if (e.getCause() == null) {
+				LOGGER.info("Chat repository in use by another process?");
+				Gui.getInstance().fatalError("Chat repository issue", "Chat repository in use by another process?");
+			} else {
+				LOGGER.error("Unable to start chat repository", e);
+				Gui.getInstance().fatalError("Chat repository issue", e);
 			}
 
 			return; // Not System.exit() so that GUI can display error
@@ -606,6 +657,7 @@ public class Controller extends Thread {
 					repositoryCheckpointTimestamp = now + repositoryCheckpointInterval;
 
 					RepositoryManager.setRequestedCheckpoint(Boolean.TRUE);
+					ChatRepositoryManager.setRequestedCheckpoint(Boolean.TRUE);
 				}
 
 				// Give repository a chance to backup (if enabled)
@@ -991,6 +1043,13 @@ public class Controller extends Thread {
 					LOGGER.error("Error occurred while shutting down repository", e);
 				}
 
+				try {
+					LOGGER.info("Shutting down chat repository");
+					ChatRepositoryManager.closeRepositoryFactory();
+				} catch (DataException e) {
+					LOGGER.error("Error occurred while shutting down chat repository", e);
+				}
+
 				// Release the lock if we acquired it
 				if (blockchainLock.isHeldByCurrentThread()) {
 					blockchainLock.unlock();
@@ -1041,10 +1100,15 @@ public class Controller extends Thread {
 		// Send our current height
 		network.broadcastOurChain();
 
-		// Request unconfirmed transaction signatures, but only if we're up-to-date.
+		// Request unconfirmed transaction signatures and chat messages, but only if we're up-to-date.
 		// If we're NOT up-to-date then priority is synchronizing first
-		if (isUpToDate())
+		if (isUpToDate()) {
 			network.broadcast(network::buildGetUnconfirmedTransactionsMessage);
+
+			// Build the message only once, as it requires heavy db calls
+			Message chatMessageSignaturesMessage = network.buildChatMessageSignaturesMessage();
+			network.broadcast(peer -> peer.getPeersVersion() >= ChatMessageSignaturesMessage.MIN_PEER_VERSION ? chatMessageSignaturesMessage : null);
+		}
 	}
 
 	public void onMintingPossibleChange(boolean isMintingPossible) {
@@ -1201,10 +1265,29 @@ public class Controller extends Thread {
 			// Notify listeners
 			EventBus.INSTANCE.notify(new NewTransactionEvent(transactionData));
 
-			// If this is a CHAT transaction, there may be extra listeners to notify
-			if (transactionData.getType() == TransactionType.CHAT)
-				ChatNotifier.getInstance().onNewChatTransaction((ChatTransactionData) transactionData);
+//			// If this is a CHAT transaction, there may be extra listeners to notify
+//			if (transactionData.getType() == TransactionType.CHAT)
+//				ChatNotifier.getInstance().onNewChatTransaction((ChatTransactionData) transactionData);
+			// TODO: bridge CHAT messages to new db
 		});
+	}
+
+	// TODO: call this when sending new messages (as well as calling save())
+	public void onNewChatMessage(ChatMessage chatMessage) {
+		onNewChatMessages(Arrays.asList(chatMessage));
+	}
+
+	public void onNewChatMessages(List<ChatMessage> chatMessages) {
+		List<byte[]> signatures = chatMessages.stream().map(ChatMessage::getSignature).collect(Collectors.toList());
+
+		// Notify all peers
+		Message newChatMessageSignatureMessage = new ChatMessageSignaturesMessage(signatures);
+		Network.getInstance().broadcast(broadcastPeer -> newChatMessageSignatureMessage);
+
+		// Notify listeners
+		for (ChatMessage chatMessage : chatMessages) {
+			ChatNotifier.getInstance().onNewChatMessage(chatMessage);
+		}
 	}
 
 	public void onPeerHandshakeCompleted(Peer peer) {
@@ -1335,6 +1418,26 @@ public class Controller extends Thread {
 
 			case GET_NAME:
 				onNetworkGetNameMessage(peer, message);
+				break;
+
+			case CHAT_MESSAGE_SIGNATURES:
+				onNetworkChatMessageSignaturesMessage(peer, message);
+				break;
+
+			case CHAT_MESSAGES:
+				onNetworkChatMessagesMessage(peer, message);
+				break;
+
+			case GET_CHAT_MESSAGES:
+				onNetworkGetChatMessagesMessage(peer, message);
+				break;
+
+			case GET_CHAT_MESSAGE:
+				onNetworkGetChatMessageMessage(peer, message);
+				break;
+
+			case GET_RECENT_CHAT_MESSAGES:
+				onNetworkGetRecentChatMessagesMessage(peer, message);
 				break;
 
 			default:
@@ -1834,6 +1937,160 @@ public class Controller extends Thread {
 
 		} catch (DataException e) {
 			LOGGER.error(String.format("Repository issue while send name %s to peer %s", name, peer), e);
+		}
+	}
+
+	private void onNetworkGetChatMessagesMessage(Peer peer, Message message) {
+		GetChatMessagesMessage getChatMessagesMessage = (GetChatMessagesMessage) message;
+		final long timestamp = getChatMessagesMessage.getTimestamp();
+		final Direction direction = getChatMessagesMessage.getDirection();
+		this.stats.getChatMessagesStats.requests.incrementAndGet();
+
+		try (final Repository repository = RepositoryManager.getRepository()) {
+			int numberRequested = Math.min(MAX_CHAT_MESSAGES_PER_REPLY, getChatMessagesMessage.getNumberRequested());
+
+			Long before = (direction == Direction.BACKWARDS ? timestamp : null);
+			Long after = (direction == Direction.FORWARDS ? timestamp : null);
+			boolean reverse = (direction == Direction.BACKWARDS);
+
+			List<ChatMessage> chatMessages = repository.getChatRepository().getMessagesMatchingCriteria(
+					before, after, null, null, numberRequested, 0, reverse);
+
+			Message chatMessagesMessage = new ChatMessagesMessage(chatMessages);
+			chatMessagesMessage.setId(message.getId());
+			if (!peer.sendMessage(chatMessagesMessage))
+				peer.disconnect("failed to send chat messages");
+
+		} catch (DataException e) {
+			LOGGER.error(String.format("Repository issue while sending chat messages to peer %s", peer), e);
+		}
+	}
+
+	private void onNetworkGetChatMessageMessage(Peer peer, Message message) {
+		GetChatMessageMessage getChatMessageMessage = (GetChatMessageMessage) message;
+		byte[] signature = getChatMessageMessage.getSignature();
+		this.stats.getChatMessageStats.requests.incrementAndGet();
+
+		try (final Repository repository = ChatRepositoryManager.getRepository()) {
+
+			ChatMessage chatMessage = repository.getChatRepository().getChatMessageBySignature(signature);
+			if (chatMessage == null) {
+				// We don't have this message
+				this.stats.getChatMessageStats.unknownMessages.getAndIncrement();
+
+				// Send valid, yet unexpected message type in response, so peer doesn't have to wait for timeout
+				LOGGER.debug(() -> String.format("Sending 'message unknown' response to peer %s for GET_CHAT_MESSAGE request for unknown signature %s", peer, Base58.encode(signature)));
+
+				// We'll send empty block summaries message as it's very short
+				Message nameUnknownMessage = new BlockSummariesMessage(Collections.emptyList());
+				nameUnknownMessage.setId(message.getId());
+				if (!peer.sendMessage(nameUnknownMessage))
+					peer.disconnect("failed to send message-unknown response");
+				return;
+			}
+
+			Message chatMessagesMessage = new ChatMessagesMessage(Arrays.asList(chatMessage));
+			chatMessagesMessage.setId(message.getId());
+			if (!peer.sendMessage(chatMessagesMessage))
+				peer.disconnect("failed to send chat messages");
+
+		} catch (DataException e) {
+			LOGGER.error(String.format("Repository issue while sending chat message to peer %s", peer), e);
+		}
+	}
+
+	private void onNetworkGetRecentChatMessagesMessage(Peer peer, Message message) {
+		GetRecentChatMessagesMessage getRecentChatMessagesMessage = (GetRecentChatMessagesMessage) message;
+		final List<ByteArray> signatures = getRecentChatMessagesMessage.getSignatures();
+		this.stats.getRecentChatMessagesStats.requests.incrementAndGet();
+
+		try (final Repository repository = RepositoryManager.getRepository()) {
+			List<ChatMessage> chatMessages = new ArrayList<>();
+
+			// Don't request further back than 24 hours
+			long after = NTP.getTime() - (24 * 60 * 60 * 1000L);
+
+			// Get all recent messages from repository
+			List<ChatMessage> ourChatMessages = repository.getChatRepository().getMessagesMatchingCriteria(
+					null, after, null, null, null, 0, true);
+
+			for (ChatMessage chatMessage : ourChatMessages) {
+				// Skip if the sender already has this one
+				if (signatures.contains(chatMessage.getSignature())) {
+					continue;
+				}
+
+				chatMessages.add(chatMessage);
+
+				if (chatMessages.size() >= MAX_CHAT_MESSAGES_PER_REPLY) {
+					// Don't send any more
+					break;
+				}
+			}
+
+			Message chatMessagesMessage = new ChatMessagesMessage(chatMessages);
+			chatMessagesMessage.setId(message.getId());
+			if (!peer.sendMessage(chatMessagesMessage))
+				peer.disconnect("failed to send chat messages");
+
+		} catch (DataException e) {
+			LOGGER.error(String.format("Repository issue while sending recent chat messages to peer %s", peer), e);
+		}
+	}
+
+	private void onNetworkChatMessagesMessage(Peer peer, Message message) {
+		ChatMessagesMessage chatMessagesMessage = (ChatMessagesMessage) message;
+		final List<ChatMessage> chatMessages = chatMessagesMessage.getChatMessages();
+
+		try (final Repository chatRepository = ChatRepositoryManager.getRepository()) {
+
+			List<ChatMessage> newChatMessages = new ArrayList<>();
+
+			for (ChatMessage chatMessage : chatMessages) {
+				// Check if we already have this message
+				ChatMessage existingChatMessage = chatRepository.getChatRepository().getChatMessageBySignature(chatMessage.getSignature());
+				if (existingChatMessage != null) {
+					continue;
+				}
+
+				newChatMessages.add(chatMessage);
+
+				chatRepository.getChatRepository().save(chatMessage);
+			}
+
+			if (!newChatMessages.isEmpty()) {
+				// Notify other peers about new message(s)
+				onNewChatMessages(newChatMessages);
+			}
+
+		} catch (DataException e) {
+			LOGGER.error(String.format("Repository issue while sending recent chat messages to peer %s", peer), e);
+		}
+	}
+
+	private void onNetworkChatMessageSignaturesMessage(Peer peer, Message message) {
+		ChatMessageSignaturesMessage chatMessageSignaturesMessage = (ChatMessageSignaturesMessage) message;
+		final List<byte[]> signatures = chatMessageSignaturesMessage.getSignatures();
+
+		try (final Repository chatRepository = ChatRepositoryManager.getRepository()) {
+
+			for (byte[] signature : signatures) {
+				// Check if we already have this message
+				ChatMessage existingChatMessage = chatRepository.getChatRepository().getChatMessageBySignature(signature);
+				if (existingChatMessage != null) {
+					continue;
+				}
+
+				// Request the message itself
+				Message getChatMessageMessage = new GetChatMessageMessage(signature);
+				if (!peer.sendMessage(getChatMessageMessage)) {
+					peer.disconnect("failed to request chat message");
+					return;
+				}
+			}
+
+		} catch (DataException e) {
+			LOGGER.error(String.format("Repository issue while sending recent chat messages to peer %s", peer), e);
 		}
 	}
 

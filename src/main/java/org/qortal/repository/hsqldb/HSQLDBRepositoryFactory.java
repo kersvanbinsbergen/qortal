@@ -18,6 +18,11 @@ import org.qortal.settings.Settings;
 
 public class HSQLDBRepositoryFactory implements RepositoryFactory {
 
+	public enum HSQLDBRepositoryType {
+		MAIN,
+		CHAT
+	}
+
 	private static final Logger LOGGER = LogManager.getLogger(HSQLDBRepositoryFactory.class);
 
 	/** Log getConnection() calls that take longer than this. (ms) */
@@ -25,18 +30,21 @@ public class HSQLDBRepositoryFactory implements RepositoryFactory {
 
 	private String connectionUrl;
 	private HSQLDBPool connectionPool;
+	private HSQLDBRepositoryType type;
 	private final boolean wasPristine;
 
 	/**
-	 * Constructs new RepositoryFactory using passed <tt>connectionUrl</tt>.
+	 * Constructs new RepositoryFactory using passed <tt>connectionUrl</tt> and <tt>type</tt>.
 	 * 
 	 * @param connectionUrl
+	 * @param type
 	 * @throws DataException <i>without throwable</i> if repository in use by another process.
 	 * @throws DataException <i>with throwable</i> if repository cannot be opened for some other reason.
 	 */
-	public HSQLDBRepositoryFactory(String connectionUrl) throws DataException {
+	public HSQLDBRepositoryFactory(String connectionUrl, HSQLDBRepositoryType type) throws DataException {
 		// one-time initialization goes in here
 		this.connectionUrl = connectionUrl;
+		this.type = type;
 
 		// Check no-one else is accessing database
 		try (Connection connection = DriverManager.getConnection(this.connectionUrl)) {
@@ -66,11 +74,35 @@ public class HSQLDBRepositoryFactory implements RepositoryFactory {
 
 		// Perform DB updates?
 		try (final Connection connection = this.connectionPool.getConnection()) {
-			this.wasPristine = HSQLDBDatabaseUpdates.updateDatabase(connection);
+			switch (this.type) {
+				case MAIN:
+					this.wasPristine = HSQLDBDatabaseUpdates.updateDatabase(connection);
+					break;
+
+				case CHAT:
+					this.wasPristine = HSQLDBChatDatabaseUpdates.updateDatabase(connection);
+					break;
+
+				default:
+					this.wasPristine = false;
+					throw new DataException(String.format("No updates defined for %s repository", this.type));
+			}
 		} catch (SQLException e) {
 			throw new DataException("Repository initialization error", e);
 		}
 	}
+
+	/**
+	 * Constructs new RepositoryFactory using passed <tt>connectionUrl</tt>, using the <tt>MAIN</tt> repository type.
+	 *
+	 * @param connectionUrl
+	 * @throws DataException <i>without throwable</i> if repository in use by another process.
+	 * @throws DataException <i>with throwable</i> if repository cannot be opened for some other reason.
+	 */
+	public HSQLDBRepositoryFactory(String connectionUrl) throws DataException {
+		this(connectionUrl, HSQLDBRepositoryType.MAIN);
+	}
+
 
 	@Override
 	public boolean wasPristineAtOpen() {
@@ -79,7 +111,7 @@ public class HSQLDBRepositoryFactory implements RepositoryFactory {
 
 	@Override
 	public RepositoryFactory reopen() throws DataException {
-		return new HSQLDBRepositoryFactory(this.connectionUrl);
+		return new HSQLDBRepositoryFactory(this.connectionUrl, this.type);
 	}
 
 	@Override

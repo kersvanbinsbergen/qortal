@@ -83,7 +83,15 @@ public enum MessageType {
     GET_NAME(182, GetNameMessage::fromByteBuffer),
 
     TRANSACTIONS(190, TransactionsMessage::fromByteBuffer),
-    GET_ACCOUNT_TRANSACTIONS(191, GetAccountTransactionsMessage::fromByteBuffer);
+    GET_ACCOUNT_TRANSACTIONS(191, GetAccountTransactionsMessage::fromByteBuffer),
+
+    // Chat messages
+    CHAT_MESSAGE_SIGNATURES(200, ChatMessageSignaturesMessage::fromByteBuffer),
+    CHAT_MESSAGES(201, TransactionsMessage::fromByteBuffer),
+    GET_CHAT_MESSAGES(202, GetChatMessagesMessage::fromByteBuffer),
+    GET_CHAT_MESSAGE(203, GetChatMessageMessage::fromByteBuffer),
+    GET_RECENT_CHAT_MESSAGES(204, GetRecentChatMessagesMessage::fromByteBuffer);
+
 
     public final int value;
     public final MessageProducer fromByteBufferMethod;

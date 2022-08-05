@@ -12,6 +12,7 @@ import org.qortal.controller.arbitrary.ArbitraryDataManager;
 import org.qortal.crypto.Crypto;
 import org.qortal.data.block.BlockData;
 import org.qortal.data.block.BlockSummaryData;
+import org.qortal.data.chat.ChatMessage;
 import org.qortal.data.network.PeerData;
 import org.qortal.data.transaction.TransactionData;
 import org.qortal.network.message.*;
@@ -20,11 +21,8 @@ import org.qortal.repository.DataException;
 import org.qortal.repository.Repository;
 import org.qortal.repository.RepositoryManager;
 import org.qortal.settings.Settings;
-import org.qortal.utils.Base58;
-import org.qortal.utils.ExecuteProduceConsume;
+import org.qortal.utils.*;
 import org.qortal.utils.ExecuteProduceConsume.StatsSnapshot;
-import org.qortal.utils.NTP;
-import org.qortal.utils.NamedThreadFactory;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -88,6 +86,8 @@ public class Network {
 
     public static final int MAX_SIGNATURES_PER_REPLY = 500;
     public static final int MAX_BLOCK_SUMMARIES_PER_REPLY = 500;
+    public static final int MAX_CHAT_MESSAGES_PER_REPLY = 500;
+    public static final int MAX_CHAT_MESSAGE_SIGNATURES_PER_REQUEST = 10000; // 640 KiB
 
     private static final long DISCONNECTION_CHECK_INTERVAL = 10 * 1000L; // milliseconds
 
@@ -1223,6 +1223,29 @@ public class Network {
 
     public Message buildGetUnconfirmedTransactionsMessage(Peer peer) {
         return new GetUnconfirmedTransactionsMessage();
+    }
+
+    public Message buildChatMessageSignaturesMessage() {
+        try (final Repository repository = RepositoryManager.getRepository()) {
+
+            // Don't request further back than 24 hours
+            long after = NTP.getTime() - (24 * 60 * 60 * 1000L);
+
+            // Get all recent messages from repository
+            List<ChatMessage> ourChatMessages = repository.getChatRepository().getMessagesMatchingCriteria(
+                    null, after, null, null, null, 0, true);
+
+            List<byte[]> signatures = new ArrayList<>();
+            for (ChatMessage chatMessage : ourChatMessages) {
+                signatures.add(chatMessage.getSignature());
+            }
+
+            return new ChatMessageSignaturesMessage(signatures);
+
+        } catch (DataException e) {
+            LOGGER.error("Repository issue while building recent chat messages message", e);
+        }
+        return null;
     }
 
 

@@ -10,15 +10,15 @@ public interface ChatRepository {
 
 	/**
 	 * Returns CHAT messages matching criteria.
-	 * <p>
-	 * Expects EITHER non-null txGroupID OR non-null sender and recipient addresses.
 	 */
 	public List<ChatMessage> getMessagesMatchingCriteria(Long before, Long after,
 			Integer txGroupId, byte[] reference, byte[] chatReferenceBytes, Boolean hasChatReference,
 			List<String> involving, Integer limit, Integer offset, Boolean reverse) throws DataException;
 
-	public ChatMessage toChatMessage(ChatTransactionData chatTransactionData) throws DataException;
-
 	public ActiveChats getActiveChats(String address) throws DataException;
+
+	public ChatMessage getChatMessageBySignature(byte[] signature) throws DataException;
+
+	public void save(ChatMessage chatMessage) throws DataException;
 
 }
