@@ -11,7 +11,7 @@ FROM openjdk:11
 
 RUN useradd -r -u 1000 -g users qortal && \
     mkdir  /qortal && \
-    chown 1000:100 /qortal && \
+    chown 1000:100 /qortal
 
 COPY --from=builder /work/log4j2.properties /qortal/
 COPY --from=builder /work/target/qortal*.jar /qortal/qortal.jar
