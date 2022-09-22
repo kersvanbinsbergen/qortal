@@ -16,6 +16,7 @@ RUN useradd -r -u 1000 -g users qortal && \
 COPY --from=builder /work/log4j2.properties /qortal/
 COPY --from=builder /work/target/qortal*.jar /qortal/qortal.jar
 COPY --from=builder /work/start.sh /qortal/
+COPY --from=builder /work/settings.json /qortal/
 USER 1000:100
 
 EXPOSE 12391 12392
