@@ -55,9 +55,9 @@ else
           -Djava.net.preferIPv4Stack=false \
           ${JVM_MEMORY_ARGS} \
           -jar qortal.jar
+  # Save backgrounded process's PID
+  echo $! > run.pid
+  echo qortal running as pid $!
 fi
 
 
-# Save backgrounded process's PID
-# echo $! > run.pid
-# echo qortal running as pid $!

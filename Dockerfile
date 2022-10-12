@@ -1,7 +1,6 @@
 FROM maven:3-openjdk-11 as builder
 
 
-
 WORKDIR /work
 COPY . .
 RUN mvn clean package
