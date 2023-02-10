@@ -262,7 +262,7 @@ public class HSQLDBChatRepository implements ChatRepository {
 
 		sql.append("SELECT created_when, tx_group_id, reference, creator, sender, recipient, "
 				// TODO: + "SenderNames.name, RecipientNames.name, "
-				+ "data, is_text, is_encrypted, signature "
+				+ "chat_reference, data, is_text, is_encrypted, signature "
 				+ "FROM ChatMessages WHERE signature = ?");
 		// TODO: + "LEFT OUTER JOIN Names AS SenderNames ON SenderNames.owner = sender "
 		// TODO: + "LEFT OUTER JOIN Names AS RecipientNames ON RecipientNames.owner = recipient ");
@@ -279,13 +279,14 @@ public class HSQLDBChatRepository implements ChatRepository {
 			String senderName = resultSet.getString(6); // TOOD
 			String recipient = resultSet.getString(7);
 			String recipientName = resultSet.getString(8); // TODO
-			byte[] data = resultSet.getBytes(9);
-			boolean isText = resultSet.getBoolean(10);
-			boolean isEncrypted = resultSet.getBoolean(11);
-			byte[] signatureResult = resultSet.getBytes(12);
+			byte[] chatReference = resultSet.getBytes(9);
+			byte[] data = resultSet.getBytes(10);
+			boolean isText = resultSet.getBoolean(11);
+			boolean isEncrypted = resultSet.getBoolean(12);
+			byte[] signatureResult = resultSet.getBytes(13);
 
 			ChatMessage chatMessage = new ChatMessage(timestamp, groupId, reference, senderPublicKey, sender,
-					senderName, recipient, recipientName, data, isText, isEncrypted, signatureResult);
+					senderName, recipient, recipientName, chatReference, data, isText, isEncrypted, signatureResult);
 
 			return chatMessage;
 		} catch (SQLException e) {

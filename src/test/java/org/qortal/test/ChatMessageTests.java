@@ -37,6 +37,9 @@ public class ChatMessageTests extends Common {
             long timestamp = NTP.getTime();
             int txGroupId = 1;
 
+            byte[] chatReference = new byte[64];
+            new Random().nextBytes(chatReference);
+
             byte[] messageData = new byte[80];
             new Random().nextBytes(messageData);
 
@@ -45,7 +48,7 @@ public class ChatMessageTests extends Common {
 
             ChatMessage aliceMessage = new ChatMessage(timestamp, txGroupId, alice.getLastReference(),
                     alice.getPublicKey(), alice.getAddress(), "alice", bob.getAddress(), "bob",
-                    messageData, true, true, signature);
+                    chatReference, messageData, true, true, signature);
 
             // Serialize
             ChatMessagesMessage chatMessagesMessage = new ChatMessagesMessage(Arrays.asList(aliceMessage));

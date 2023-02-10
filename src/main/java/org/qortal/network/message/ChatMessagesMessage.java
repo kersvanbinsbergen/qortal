@@ -14,10 +14,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.qortal.naming.Name.MAX_NAME_SIZE;
+import static org.qortal.transform.Transformer.SIGNATURE_LENGTH;
 
 public class ChatMessagesMessage extends Message {
 
 	private List<ChatMessage> chatMessages;
+
+	private static final int CHAT_REFERENCE_LENGTH = SIGNATURE_LENGTH;
+
 
 	public ChatMessagesMessage(List<ChatMessage> chatMessages) {
 		super(MessageType.CHAT_MESSAGES);
@@ -43,6 +47,14 @@ public class ChatMessagesMessage extends Message {
 				Serialization.serializeSizedStringV2(bytes, chatMessage.getRecipient());
 
 				Serialization.serializeSizedStringV2(bytes, chatMessage.getRecipientName());
+
+				// Include chat reference if it's not null
+				if (chatMessage.getChatReference() != null) {
+					bytes.write((byte) 1);
+					bytes.write(chatMessage.getChatReference());
+				} else {
+					bytes.write((byte) 0);
+				}
 
 				bytes.write(Ints.toByteArray(chatMessage.getData().length));
 				bytes.write(chatMessage.getData());
@@ -81,7 +93,7 @@ public class ChatMessagesMessage extends Message {
 
 				int txGroupId = bytes.getInt();
 
-				byte[] reference = new byte[Transformer.SIGNATURE_LENGTH];
+				byte[] reference = new byte[SIGNATURE_LENGTH];
 				bytes.get(reference);
 
 				byte[] senderPublicKey = new byte[Transformer.PUBLIC_KEY_LENGTH];
@@ -95,6 +107,14 @@ public class ChatMessagesMessage extends Message {
 
 				String recipientName = Serialization.deserializeSizedStringV2(bytes, MAX_NAME_SIZE);
 
+				byte[] chatReference = null;
+				boolean hasChatReference = bytes.get() != 0;
+
+				if (hasChatReference) {
+					chatReference = new byte[CHAT_REFERENCE_LENGTH];
+					bytes.get(chatReference);
+				}
+
 				int dataLength = bytes.getInt();
 				byte[] data = new byte[dataLength];
 				bytes.get(data);
@@ -103,11 +123,11 @@ public class ChatMessagesMessage extends Message {
 
 				boolean isEncrypted = bytes.getInt() == 1;
 
-				byte[] signature = new byte[Transformer.SIGNATURE_LENGTH];
+				byte[] signature = new byte[SIGNATURE_LENGTH];
 				bytes.get(signature);
 
 				ChatMessage chatMessage = new ChatMessage(timestamp, txGroupId, reference, senderPublicKey,
-						sender, senderName, recipient, recipientName, data, isText, isEncrypted, signature);
+						sender, senderName, recipient, recipientName, chatReference, data, isText, isEncrypted, signature);
 				chatMessages.add(chatMessage);
 			}
 

@@ -1954,7 +1954,7 @@ public class Controller extends Thread {
 			boolean reverse = (direction == Direction.BACKWARDS);
 
 			List<ChatMessage> chatMessages = repository.getChatRepository().getMessagesMatchingCriteria(
-					before, after, null, null, numberRequested, 0, reverse);
+					before, after, null, null, null, null, null, numberRequested, 0, reverse);
 
 			Message chatMessagesMessage = new ChatMessagesMessage(chatMessages);
 			chatMessagesMessage.setId(message.getId());
@@ -2012,7 +2012,7 @@ public class Controller extends Thread {
 
 			// Get all recent messages from repository
 			List<ChatMessage> ourChatMessages = repository.getChatRepository().getMessagesMatchingCriteria(
-					null, after, null, null, null, 0, true);
+					null, after, null, null, null, null, null, null, 0, true);
 
 			for (ChatMessage chatMessage : ourChatMessages) {
 				// Skip if the sender already has this one

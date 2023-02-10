@@ -1233,7 +1233,7 @@ public class Network {
 
             // Get all recent messages from repository
             List<ChatMessage> ourChatMessages = repository.getChatRepository().getMessagesMatchingCriteria(
-                    null, after, null, null, null, 0, true);
+                    null, after, null, null, null, null, null, null, 0, true);
 
             List<byte[]> signatures = new ArrayList<>();
             for (ChatMessage chatMessage : ourChatMessages) {

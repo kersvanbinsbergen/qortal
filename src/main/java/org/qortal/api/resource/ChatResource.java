@@ -134,12 +134,7 @@ public class ChatResource {
 
 		try (final Repository repository = RepositoryManager.getRepository()) {
 
-			ChatTransactionData chatTransactionData = (ChatTransactionData) repository.getTransactionRepository().fromSignature(signature);
-			if (chatTransactionData == null) {
-				throw ApiExceptionFactory.INSTANCE.createCustomException(request, ApiError.INVALID_CRITERIA, "Message not found");
-			}
-
-			return repository.getChatRepository().toChatMessage(chatTransactionData);
+			return repository.getChatRepository().getChatMessageBySignature(signature);
 		} catch (DataException e) {
 			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.REPOSITORY_ISSUE, e);
 		}
