@@ -41,6 +41,7 @@ import org.qortal.api.*;
 import org.qortal.api.model.ActivitySummary;
 import org.qortal.api.model.NodeInfo;
 import org.qortal.api.model.NodeStatus;
+import org.qortal.api.model.NodeSettings;
 import org.qortal.block.BlockChain;
 import org.qortal.controller.Controller;
 import org.qortal.controller.Synchronizer;
@@ -151,6 +152,22 @@ public class AdminResource {
 		NodeStatus nodeStatus = new NodeStatus();
 
 		return nodeStatus;
+	}
+
+	@GET
+	@Path("/settings")
+	@Operation(
+		summary = "Fetch node settings",
+		responses = {
+			@ApiResponse(
+				content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = NodeSettings.class))
+			)
+		}
+	)
+	public NodeSettings settings() {
+		NodeSettings nodeSettings = new NodeSettings();
+
+		return nodeSettings;
 	}
 
 	@GET
