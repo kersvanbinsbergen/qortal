@@ -25,7 +25,7 @@ public class Asset {
 
 	public static final int MIN_NAME_SIZE = 3;
 	public static final int MAX_NAME_SIZE = 40;
-	public static final int MAX_DESCRIPTION_SIZE = 4000;
+	public static final int MAX_DESCRIPTION_SIZE = 8000;
 	public static final int MAX_DATA_SIZE = 400000;
 
 	public static final long MAX_QUANTITY = 10_000_000_000L * Amounts.MULTIPLIER; // but also to 8 decimal places
