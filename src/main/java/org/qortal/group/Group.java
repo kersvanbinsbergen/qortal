@@ -85,7 +85,7 @@ public class Group {
 
 	public static final int MIN_NAME_SIZE = 3;
 	public static final int MAX_NAME_SIZE = 32;
-	public static final int MAX_DESCRIPTION_SIZE = 128;
+	public static final int MAX_DESCRIPTION_SIZE = 256;
 	/** Max size of kick/ban reason */
 	public static final int MAX_REASON_SIZE = 128;
 
