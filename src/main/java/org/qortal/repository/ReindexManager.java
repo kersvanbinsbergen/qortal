@@ -178,6 +178,7 @@ public class ReindexManager {
         // Write the signature and height into the BlockArchive table
         BlockArchiveData blockArchiveData = new BlockArchiveData(blockData);
         this.repository.getBlockArchiveRepository().save(blockArchiveData);
+        this.repository.getBlockArchiveRepository().setBlockArchiveHeight(blockData.getHeight()+1);
         this.repository.saveChanges();
     }
 

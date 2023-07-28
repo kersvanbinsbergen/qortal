@@ -20,7 +20,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -38,7 +37,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.appender.RollingFileAppender;
 import org.json.JSONArray;
-import org.json.JSONObject;
 import org.qortal.account.Account;
 import org.qortal.account.PrivateKeyAccount;
 import org.qortal.api.*;
@@ -57,6 +55,7 @@ import org.qortal.network.Network;
 import org.qortal.network.Peer;
 import org.qortal.network.PeerAddress;
 import org.qortal.repository.DataException;
+import org.qortal.repository.ReindexManager;
 import org.qortal.repository.Repository;
 import org.qortal.repository.RepositoryManager;
 import org.qortal.settings.Settings;
@@ -874,6 +873,48 @@ public class AdminResource {
 		} catch (DataException e) {
 			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.REPOSITORY_ISSUE, e);
 		}
+	}
+
+
+	@POST
+	@Path("/repository/reindex")
+	@Operation(
+			summary = "Reindex repository",
+			description = "Rebuilds all transactions and balances from archived blocks. Warning: takes around 1 week, and the core will not function normally during this time. If 'false' is returned, the database may be left in an inconsistent state, requiring another reindex or a bootstrap to correct it.",
+			responses = {
+					@ApiResponse(
+							description = "\"true\"",
+							content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(type = "string"))
+					)
+			}
+	)
+	@ApiErrors({ApiError.REPOSITORY_ISSUE})
+	@SecurityRequirement(name = "apiKey")
+	public String reindex(@HeaderParam(Security.API_KEY_HEADER) String apiKey) {
+		Security.checkApiCallAllowed(request);
+
+		try {
+			ReentrantLock blockchainLock = Controller.getInstance().getBlockchainLock();
+
+			blockchainLock.lockInterruptibly();
+
+			try {
+				ReindexManager reindexManager = new ReindexManager();
+				reindexManager.reindex();
+				return "true";
+
+			} catch (DataException e) {
+				LOGGER.info("DataException when reindexing: {}", e.getMessage());
+
+			} finally {
+				blockchainLock.unlock();
+			}
+		} catch (InterruptedException e) {
+			// We couldn't lock blockchain to perform reindex
+			return "false";
+		}
+
+		return "false";
 	}
 
 	@DELETE
