@@ -3,6 +3,7 @@ package org.qortal.at;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,11 +24,7 @@ import org.qortal.crypto.Crypto;
 import org.qortal.data.at.ATData;
 import org.qortal.data.block.BlockData;
 import org.qortal.data.block.BlockSummaryData;
-import org.qortal.data.transaction.ATTransactionData;
-import org.qortal.data.transaction.BaseTransactionData;
-import org.qortal.data.transaction.MessageTransactionData;
-import org.qortal.data.transaction.PaymentTransactionData;
-import org.qortal.data.transaction.TransactionData;
+import org.qortal.data.transaction.*;
 import org.qortal.group.Group;
 import org.qortal.repository.ATRepository;
 import org.qortal.repository.DataException;
@@ -75,7 +72,7 @@ public class QortalATAPI extends API {
 		return this.transactions;
 	}
 
-	public boolean willExecute(int blockHeight) throws DataException {
+	public boolean willExecute(int blockHeight, List<TransactionData> parentBlockTransactions) throws DataException {
 		// Sleep-until-message/height checking
 		Long sleepUntilMessageTimestamp = this.atData.getSleepUntilMessageTimestamp();
 
@@ -87,13 +84,27 @@ public class QortalATAPI extends API {
 
 			boolean wakeDueToMessage = false;
 			if (!wakeDueToHeight) {
-				// No avoiding asking repository
-				Timestamp previousTxTimestamp = new Timestamp(sleepUntilMessageTimestamp);
-				NextTransactionInfo nextTransactionInfo = this.repository.getATRepository().findNextTransaction(this.atData.getATAddress(),
-						previousTxTimestamp.blockHeight,
-						previousTxTimestamp.transactionSequence);
+				// Check parent block's transactions to see if any relate to this AT
+				for (TransactionData transactionData : parentBlockTransactions) {
+					if (this.wasTransactionSentToThisAT(transactionData)) {
+						wakeDueToMessage = true;
+					}
+				}
 
-				wakeDueToMessage = nextTransactionInfo != null;
+				if (wakeDueToMessage) {
+					// Double check with repository that this AT should be executed, to filter out cases such as TRANSFER_ASSET
+					Timestamp previousTxTimestamp = new Timestamp(sleepUntilMessageTimestamp);
+					NextTransactionInfo nextTransactionInfo = this.repository.getATRepository().findNextTransaction(this.atData.getATAddress(),
+							previousTxTimestamp.blockHeight,
+							previousTxTimestamp.transactionSequence);
+
+					wakeDueToMessage = nextTransactionInfo != null;
+				}
+				else {
+					// No relevant transactions in previous block, so there is no need to check the db
+					// TODO: do we need to handle ATs that were previously frozen and have now recovered, or
+					// would we always detect a transaction in the last block in these cases?
+				}
 			}
 
 			// Can we skip?
@@ -102,6 +113,32 @@ public class QortalATAPI extends API {
 		}
 
 		return true;
+	}
+
+	private boolean wasTransactionSentToThisAT(TransactionData transactionData) {
+		switch (transactionData.getType()) {
+			case PAYMENT: {
+				PaymentTransactionData paymentTransactionData = (PaymentTransactionData) transactionData;
+				return Objects.equals(paymentTransactionData.getRecipient(), this.atData.getATAddress());
+			}
+			case TRANSFER_ASSET: {
+				// ATs don't check for TRANSFER_ASSET, but an AT's balance could be topped up using TRANSFER_ASSET,
+				// therefore unfreezing it.
+				TransferAssetTransactionData transferAssetTransactionData = (TransferAssetTransactionData) transactionData;
+				return Objects.equals(transferAssetTransactionData.getRecipient(), this.atData.getATAddress());
+			}
+			case MESSAGE: {
+				MessageTransactionData messageTransactionData = (MessageTransactionData) transactionData;
+				return Objects.equals(messageTransactionData.getRecipient(), this.atData.getATAddress());
+			}
+			case AT: {
+				ATTransactionData atTransactionData = (ATTransactionData) transactionData;
+				return Objects.equals(atTransactionData.getRecipient(), this.atData.getATAddress());
+			}
+			default: {
+				return false;
+			}
+		}
 	}
 
 	public void preExecute(MachineState state) {

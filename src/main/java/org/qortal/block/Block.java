@@ -1378,6 +1378,8 @@ public class Block {
 	 * 
 	 */
 	private void executeATs() throws DataException {
+		Long startTime = NTP.getTime();
+
 		// We're expecting a lack of AT state data at this point.
 		if (this.ourAtStates != null)
 			throw new IllegalStateException("Attempted to execute ATs when block's local AT state data already exists");
@@ -1391,9 +1393,13 @@ public class Block {
 		// Find all executable ATs, ordered by earliest creation date first
 		List<ATData> executableATs = this.repository.getATRepository().getAllExecutableATs();
 
+		// Get all transactions from the parent block. These are used to avoid unnecessary AT executions / db lookups.
+		List<TransactionData> parentBlockTransactions = repository.getBlockRepository().getTransactionsFromSignature(this.blockData.getReference());
+
 		// Run each AT, appends AT-Transactions and corresponding AT states, to our lists
 		for (ATData atData : executableATs) {
 			AT at = new AT(this.repository, atData);
+			at.setParentBlockTransactions(parentBlockTransactions);
 			List<AtTransaction> atTransactions = at.run(this.blockData.getHeight(), this.blockData.getTimestamp());
 			ATStateData atStateData = at.getATStateData();
 			// Didn't execute? (e.g. sleeping)
@@ -1417,6 +1423,8 @@ public class Block {
 		// AT Transactions do not affect block's transaction count
 
 		// AT Transactions do not affect block's transaction signature
+
+		LOGGER.info("Executing {} ATs in block {} took {} ms", executableATs.size(), this.blockData.getHeight(), (NTP.getTime()-startTime));
 	}
 
 	/** Returns whether block's minter is actually allowed to mint this block. */

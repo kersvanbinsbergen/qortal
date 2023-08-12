@@ -1,5 +1,6 @@
 package org.qortal.at;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -10,6 +11,7 @@ import org.qortal.crypto.Crypto;
 import org.qortal.data.at.ATData;
 import org.qortal.data.at.ATStateData;
 import org.qortal.data.transaction.DeployAtTransactionData;
+import org.qortal.data.transaction.TransactionData;
 import org.qortal.repository.ATRepository;
 import org.qortal.repository.DataException;
 import org.qortal.repository.Repository;
@@ -21,6 +23,8 @@ public class AT {
 	private Repository repository;
 	private ATData atData;
 	private ATStateData atStateData;
+
+	private List<TransactionData> parentBlockTransactions = new ArrayList<>();
 
 	// Constructors
 
@@ -72,6 +76,10 @@ public class AT {
 		return this.atStateData;
 	}
 
+	public void setParentBlockTransactions(List<TransactionData> transactions) {
+		this.parentBlockTransactions = transactions;
+	}
+
 	// Processing
 
 	public void deploy() throws DataException {
@@ -105,7 +113,7 @@ public class AT {
 		QortalATAPI api = new QortalATAPI(repository, this.atData, blockTimestamp);
 		QortalAtLoggerFactory loggerFactory = QortalAtLoggerFactory.getInstance();
 
-		if (!api.willExecute(blockHeight))
+		if (!api.willExecute(blockHeight, this.parentBlockTransactions))
 			// this.atStateData will be null
 			return Collections.emptyList();
 
