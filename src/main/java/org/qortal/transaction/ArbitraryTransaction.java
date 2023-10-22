@@ -1,10 +1,7 @@
 package org.qortal.transaction;
 
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
 import org.qortal.account.Account;
+import org.qortal.arbitrary.ArbitraryDataFile;
 import org.qortal.block.BlockChain;
 import org.qortal.controller.arbitrary.ArbitraryDataManager;
 import org.qortal.controller.repository.NamesDatabaseIntegrityCheck;
@@ -17,13 +14,16 @@ import org.qortal.data.transaction.TransactionData;
 import org.qortal.payment.Payment;
 import org.qortal.repository.DataException;
 import org.qortal.repository.Repository;
-import org.qortal.arbitrary.ArbitraryDataFile;
 import org.qortal.transform.TransformationException;
 import org.qortal.transform.Transformer;
 import org.qortal.transform.transaction.ArbitraryTransactionTransformer;
 import org.qortal.transform.transaction.TransactionTransformer;
 import org.qortal.utils.ArbitraryTransactionUtils;
 import org.qortal.utils.NTP;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class ArbitraryTransaction extends Transaction {
 

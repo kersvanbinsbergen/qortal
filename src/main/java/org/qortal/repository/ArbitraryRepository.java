@@ -3,9 +3,8 @@ package org.qortal.repository;
 import org.qortal.arbitrary.misc.Service;
 import org.qortal.data.arbitrary.ArbitraryResourceInfo;
 import org.qortal.data.arbitrary.ArbitraryResourceNameInfo;
-import org.qortal.data.network.ArbitraryPeerData;
 import org.qortal.data.transaction.ArbitraryTransactionData;
-import org.qortal.data.transaction.ArbitraryTransactionData.*;
+import org.qortal.data.transaction.ArbitraryTransactionData.Method;
 
 import java.util.List;
 
