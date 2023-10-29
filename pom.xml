@@ -50,7 +50,7 @@
 		<replacer.version>1.5.3</replacer.version>
 		<reproducible-build-maven-plugin.version>0.16</reproducible-build-maven-plugin.version>
 		<simplemagic.version>1.17</simplemagic.version>
-		<slf4j.version>2.0.9</slf4j.version>
+		<slf4j.version>1.7.36</slf4j.version>
 		<swagger-api.version>2.0.10</swagger-api.version>
 		<swagger-ui.version>3.52.5</swagger-ui.version>
 		<upnp.version>1.2</upnp.version>
