@@ -224,7 +224,9 @@ window.addEventListener("message", (event) => {
             url = "/arbitrary/resources/search?";
             if (data.service != null) url = url.concat("&service=" + data.service);
             if (data.query != null) url = url.concat("&query=" + data.query);
+            if (data.queries != null) data.queries.forEach((x, i) => url = url.concat("&query=" + x));
             if (data.exclude != null) url = url.concat("&exclude=" + data.exclude);
+            if (data.excludes != null) data.excludes.forEach((x, i) => url = url.concat("&exclude=" + x));
             if (data.identifier != null) url = url.concat("&identifier=" + data.identifier);
             if (data.name != null) url = url.concat("&name=" + data.name);
             if (data.names != null) data.names.forEach((x, i) => url = url.concat("&name=" + x));
