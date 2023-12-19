@@ -168,6 +168,7 @@ public class ArbitraryResource {
 	public List<ArbitraryResourceData> searchResources(
 			@QueryParam("service") Service service,
 			@Parameter(description = "Query (searches name, identifier, title and description fields)") @QueryParam("query") String query,
+			@Parameter(description = "Exclude (searches name, identifier, title and description fields)") @QueryParam("exclude") String exclude,
 			@Parameter(description = "Identifier (searches identifier field only)") @QueryParam("identifier") String identifier,
 			@Parameter(description = "Name (searches name field only)") @QueryParam("name") List<String> names,
 			@Parameter(description = "Title (searches title metadata field only)") @QueryParam("title") String title,
@@ -213,7 +214,7 @@ public class ArbitraryResource {
 			}
 
 			List<ArbitraryResourceData> resources = repository.getArbitraryRepository()
-					.searchArbitraryResources(service, query, identifier, names, title, description, category.toString(), usePrefixOnly,
+					.searchArbitraryResources(service, query, exclude, identifier, names, title, description, category.toString(), usePrefixOnly,
 							exactMatchNames, defaultRes, mode, minLevel, followedOnly, excludeBlocked, includeMetadata, includeStatus,
 							before, after, limit, offset, reverse);
 
