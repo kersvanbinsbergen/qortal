@@ -720,7 +720,7 @@ public class HSQLDBArbitraryRepository implements ArbitraryRepository {
 	}
 
 	@Override
-	public List<ArbitraryResourceData> searchArbitraryResources(Service service, String query, String identifier, List<String> names, String title, String description, boolean prefixOnly,
+	public List<ArbitraryResourceData> searchArbitraryResources(Service service, String query, String identifier, List<String> names, String title, String description, String category, boolean prefixOnly,
 																List<String> exactMatchNames, boolean defaultResource, SearchMode mode, Integer minLevel, Boolean followedOnly, Boolean excludeBlocked,
 																Boolean includeMetadata, Boolean includeStatus, Long before, Long after, Integer limit, Integer offset, Boolean reverse) throws DataException {
 		StringBuilder sql = new StringBuilder(512);
@@ -807,6 +807,12 @@ public class HSQLDBArbitraryRepository implements ArbitraryRepository {
 			String queryWildcard = prefixOnly ? String.format("%s%%", description.toLowerCase()) : String.format("%%%s%%", description.toLowerCase());
 			sql.append(" AND LCASE(description) LIKE ?");
 			bindParams.add(queryWildcard);
+		}
+
+		// Handle category metadata matches
+		if (category != null) {
+			sql.append(" AND category = ?");
+			bindParams.add(category);
 		}
 
 		// Handle name searches
@@ -901,7 +907,7 @@ public class HSQLDBArbitraryRepository implements ArbitraryRepository {
 				// Optional metadata fields
 				String titleResult = resultSet.getString(8);
 				String descriptionResult = resultSet.getString(9);
-				String category = resultSet.getString(10);
+				String categoryResult = resultSet.getString(10);
 				String tag1 = resultSet.getString(11);
 				String tag2 = resultSet.getString(12);
 				String tag3 = resultSet.getString(13);
@@ -930,7 +936,7 @@ public class HSQLDBArbitraryRepository implements ArbitraryRepository {
 					ArbitraryResourceMetadata metadata = new ArbitraryResourceMetadata();
 					metadata.setTitle(titleResult);
 					metadata.setDescription(descriptionResult);
-					metadata.setCategory(Category.uncategorizedValueOf(category));
+					metadata.setCategory(Category.uncategorizedValueOf(categoryResult));
 
 					List<String> tags = new ArrayList<>();
 					if (tag1 != null) tags.add(tag1);
