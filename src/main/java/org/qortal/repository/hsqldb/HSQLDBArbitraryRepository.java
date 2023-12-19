@@ -720,8 +720,8 @@ public class HSQLDBArbitraryRepository implements ArbitraryRepository {
 	}
 
 	@Override
-	public List<ArbitraryResourceData> searchArbitraryResources(Service service, List<String> queries, List<String> excludes, String identifier, List<String> names, String title, String description, String category, boolean prefixOnly,
-																List<String> exactMatchNames, boolean defaultResource, SearchMode mode, Integer minLevel, Boolean followedOnly, Boolean excludeBlocked,
+	public List<ArbitraryResourceData> searchArbitraryResources(Service service, List<String> queries, List<String> excludes, String identifier, List<String> names, String title, String description, String category, List<String> tags,
+																boolean prefixOnly, List<String> exactMatchNames, boolean defaultResource, SearchMode mode, Integer minLevel, Boolean followedOnly, Boolean excludeBlocked,
 																Boolean includeMetadata, Boolean includeStatus, Long before, Long after, Integer limit, Integer offset, Boolean reverse) throws DataException {
 		StringBuilder sql = new StringBuilder(512);
 		List<Object> bindParams = new ArrayList<>();
@@ -840,6 +840,20 @@ public class HSQLDBArbitraryRepository implements ArbitraryRepository {
 		if (category != null) {
 			sql.append(" AND category = ?");
 			bindParams.add(category);
+		}
+
+		// Handle tags metadata matches
+		if (tags != null && !tags.isEmpty()) {
+			sql.append(" AND (");
+
+			for (int i = 0; i < tags.size(); ++i) {
+				// Search anywhere in the tags, unless "prefixOnly" has been requested
+				String queryWildcard = prefixOnly ? String.format("%s%%", tags.get(i).toLowerCase()) : String.format("%%%s%%", tags.get(i).toLowerCase());
+				if (i > 0) sql.append(" OR ");
+				sql.append("(LCASE(tag1) LIKE ? OR LCASE(tag2) LIKE ? OR LCASE(tag3) LIKE ? OR LCASE(tag4) LIKE ? OR LCASE(tag5) LIKE ?)");
+				bindParams.add(queryWildcard); bindParams.add(queryWildcard); bindParams.add(queryWildcard); bindParams.add(queryWildcard); bindParams.add(queryWildcard);
+			}
+			sql.append(")");
 		}
 
 		// Handle name searches
@@ -965,13 +979,13 @@ public class HSQLDBArbitraryRepository implements ArbitraryRepository {
 					metadata.setDescription(descriptionResult);
 					metadata.setCategory(Category.uncategorizedValueOf(categoryResult));
 
-					List<String> tags = new ArrayList<>();
-					if (tag1 != null) tags.add(tag1);
-					if (tag2 != null) tags.add(tag2);
-					if (tag3 != null) tags.add(tag3);
-					if (tag4 != null) tags.add(tag4);
-					if (tag5 != null) tags.add(tag5);
-					metadata.setTags(!tags.isEmpty() ? tags : null);
+					List<String> tagsResult = new ArrayList<>();
+					if (tag1 != null) tagsResult.add(tag1);
+					if (tag2 != null) tagsResult.add(tag2);
+					if (tag3 != null) tagsResult.add(tag3);
+					if (tag4 != null) tagsResult.add(tag4);
+					if (tag5 != null) tagsResult.add(tag5);
+					metadata.setTags(!tagsResult.isEmpty() ? tagsResult : null);
 
 					if (metadata.hasMetadata()) {
 						arbitraryResourceData.metadata = metadata;

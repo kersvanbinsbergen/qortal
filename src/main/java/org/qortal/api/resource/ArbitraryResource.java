@@ -174,6 +174,7 @@ public class ArbitraryResource {
 			@Parameter(description = "Title (searches title metadata field only)") @QueryParam("title") String title,
 			@Parameter(description = "Description (searches description metadata field only)") @QueryParam("description") String description,
 			@Parameter(description = "Category (searches category metadata field only)") @QueryParam("category") Category category,
+			@Parameter(description = "Tags (searches tags metadata field only)") @QueryParam("tag") List<String> tags,
 			@Parameter(description = "Prefix only (if true, only the beginning of fields are matched)") @QueryParam("prefix") Boolean prefixOnly,
 			@Parameter(description = "Exact match names only (if true, partial name matches are excluded)") @QueryParam("exactmatchnames") Boolean exactMatchNamesOnly,
 			@Parameter(description = "Default resources (without identifiers) only") @QueryParam("default") Boolean defaultResource,
@@ -214,7 +215,7 @@ public class ArbitraryResource {
 			}
 
 			List<ArbitraryResourceData> resources = repository.getArbitraryRepository()
-					.searchArbitraryResources(service, queries, excludes, identifier, names, title, description, category.toString(), usePrefixOnly,
+					.searchArbitraryResources(service, queries, excludes, identifier, names, title, description, category.toString(), tags, usePrefixOnly,
 							exactMatchNames, defaultRes, mode, minLevel, followedOnly, excludeBlocked, includeMetadata, includeStatus,
 							before, after, limit, offset, reverse);
 
