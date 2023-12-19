@@ -185,6 +185,7 @@ public class ArbitraryResource {
 			@Parameter(description = "Exclude blocked content") @QueryParam("excludeblocked") Boolean excludeBlocked,
 			@Parameter(description = "Include status") @QueryParam("includestatus") Boolean includeStatus,
 			@Parameter(description = "Include metadata") @QueryParam("includemetadata") Boolean includeMetadata,
+			@Parameter(description = "Match ALL search terms (for query and tags fields only)") @QueryParam("matchall") Boolean matchAll,
 			@Parameter(description = "Creation date before timestamp") @QueryParam("before") Long before,
 			@Parameter(description = "Creation date after timestamp") @QueryParam("after") Long after,
 			@Parameter(ref = "limit") @QueryParam("limit") Integer limit,
@@ -195,6 +196,7 @@ public class ArbitraryResource {
 
 			boolean defaultRes = Boolean.TRUE.equals(defaultResource);
 			boolean usePrefixOnly = Boolean.TRUE.equals(prefixOnly);
+			boolean useMatchAll = Boolean.TRUE.equals(matchAll);
 
 			List<String> exactMatchNames = new ArrayList<>();
 
@@ -217,7 +219,7 @@ public class ArbitraryResource {
 			List<ArbitraryResourceData> resources = repository.getArbitraryRepository()
 					.searchArbitraryResources(service, queries, excludes, identifier, names, title, description, category.toString(), tags, usePrefixOnly,
 							exactMatchNames, defaultRes, mode, minLevel, followedOnly, excludeBlocked, includeMetadata, includeStatus,
-							before, after, limit, offset, reverse);
+							useMatchAll, before, after, limit, offset, reverse);
 
 			if (resources == null) {
 				return new ArrayList<>();

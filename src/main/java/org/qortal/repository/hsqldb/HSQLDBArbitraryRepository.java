@@ -722,7 +722,7 @@ public class HSQLDBArbitraryRepository implements ArbitraryRepository {
 	@Override
 	public List<ArbitraryResourceData> searchArbitraryResources(Service service, List<String> queries, List<String> excludes, String identifier, List<String> names, String title, String description, String category, List<String> tags,
 																boolean prefixOnly, List<String> exactMatchNames, boolean defaultResource, SearchMode mode, Integer minLevel, Boolean followedOnly, Boolean excludeBlocked,
-																Boolean includeMetadata, Boolean includeStatus, Long before, Long after, Integer limit, Integer offset, Boolean reverse) throws DataException {
+																Boolean includeMetadata, Boolean includeStatus, boolean useMatchAll, Long before, Long after, Integer limit, Integer offset, Boolean reverse) throws DataException {
 		StringBuilder sql = new StringBuilder(512);
 		List<Object> bindParams = new ArrayList<>();
 
@@ -775,7 +775,10 @@ public class HSQLDBArbitraryRepository implements ArbitraryRepository {
 				// Note that without prefixOnly it will bypass any indexes so may not scale well
 				// Longer term we probably want to copy resources to their own table anyway
 				String queryWildcard = prefixOnly ? String.format("%s%%", queries.get(i).toLowerCase()) : String.format("%%%s%%", queries.get(i).toLowerCase());
-				if (i > 0) sql.append(" OR ");
+				if (i > 0) {
+					if (useMatchAll) sql.append(" AND ");
+					else sql.append(" OR ");
+				}
 				if (defaultResource) {
 					// Default resource requested - use NULL identifier and search name only
 					sql.append("(LCASE(name) LIKE ? AND identifier='default')");
@@ -849,7 +852,10 @@ public class HSQLDBArbitraryRepository implements ArbitraryRepository {
 			for (int i = 0; i < tags.size(); ++i) {
 				// Search anywhere in the tags, unless "prefixOnly" has been requested
 				String queryWildcard = prefixOnly ? String.format("%s%%", tags.get(i).toLowerCase()) : String.format("%%%s%%", tags.get(i).toLowerCase());
-				if (i > 0) sql.append(" OR ");
+				if (i > 0) {
+					if (useMatchAll) sql.append(" AND ");
+					else sql.append(" OR ");
+				}
 				sql.append("(LCASE(tag1) LIKE ? OR LCASE(tag2) LIKE ? OR LCASE(tag3) LIKE ? OR LCASE(tag4) LIKE ? OR LCASE(tag5) LIKE ?)");
 				bindParams.add(queryWildcard); bindParams.add(queryWildcard); bindParams.add(queryWildcard); bindParams.add(queryWildcard); bindParams.add(queryWildcard);
 			}
