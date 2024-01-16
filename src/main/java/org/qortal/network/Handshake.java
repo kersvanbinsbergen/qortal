@@ -182,8 +182,6 @@ public enum Handshake {
 				return null;
 			}
 
-			peer.setPeersNodeId(Crypto.toNodeAddress(peersPublicKey));
-
 			// For inbound peers, we need to go into interim holding state while we compute RESPONSE
 			if (!peer.isOutbound())
 				return RESPONDING;

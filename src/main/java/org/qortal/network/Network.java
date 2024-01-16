@@ -92,10 +92,9 @@ public class Network {
 
     private static final int BROADCAST_CHAIN_TIP_DEPTH = 7; // Just enough to fill a SINGLE TCP packet (~1440 bytes)
 
-    // Generate our node keys / ID
+    // Generate our node keys
     private final Ed25519PrivateKeyParameters edPrivateKeyParams = new Ed25519PrivateKeyParameters(new SecureRandom());
     private final Ed25519PublicKeyParameters edPublicKeyParams = edPrivateKeyParams.generatePublicKey();
-    private final String ourNodeId = Crypto.toNodeAddress(edPublicKeyParams.getEncoded());
 
     private final int maxMessageSize;
     private final int minOutboundPeers;
@@ -279,10 +278,6 @@ public class Network {
 
     public byte[] getMessageMagic() {
         return Settings.getInstance().isTestNet() ? TESTNET_MESSAGE_MAGIC : MAINNET_MESSAGE_MAGIC;
-    }
-
-    public String getOurNodeId() {
-        return this.ourNodeId;
     }
 
     protected byte[] getOurPublicKey() {

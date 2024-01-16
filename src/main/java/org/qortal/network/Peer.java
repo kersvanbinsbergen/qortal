@@ -124,7 +124,6 @@ public class Peer {
 
     private final Object peerInfoLock = new Object();
 
-    private String peersNodeId;
     private byte[] peersPublicKey;
     private byte[] peersChallenge;
 
@@ -319,18 +318,6 @@ public class Peer {
 
     protected byte[] getOurChallenge() {
         return this.ourChallenge;
-    }
-
-    public String getPeersNodeId() {
-        synchronized (this.peerInfoLock) {
-            return this.peersNodeId;
-        }
-    }
-
-    protected void setPeersNodeId(String peersNodeId) {
-        synchronized (this.peerInfoLock) {
-            this.peersNodeId = peersNodeId;
-        }
     }
 
     public byte[] getPeersPublicKey() {

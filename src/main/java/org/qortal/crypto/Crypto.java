@@ -23,7 +23,6 @@ public abstract class Crypto {
 
 	public static final byte ADDRESS_VERSION = 58; // Q
 	public static final byte AT_ADDRESS_VERSION = 23; // A
-	public static final byte NODE_ADDRESS_VERSION = 53; // N
 
 	/**
 	 * Returns 32-byte SHA-256 digest of message passed in input.
@@ -200,10 +199,6 @@ public abstract class Crypto {
 
 	public static String toATAddress(byte[] signature) {
 		return toAddress(AT_ADDRESS_VERSION, signature);
-	}
-
-	public static String toNodeAddress(byte[] publicKey) {
-		return toAddress(NODE_ADDRESS_VERSION, publicKey);
 	}
 
 	public static boolean isValidAddress(String address) {

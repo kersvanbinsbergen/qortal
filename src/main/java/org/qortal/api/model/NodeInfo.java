@@ -10,7 +10,6 @@ public class NodeInfo {
 	public long uptime;
 	public String buildVersion;
 	public long buildTimestamp;
-	public String nodeId;
 	public boolean isTestNet;
 	public String type;
 

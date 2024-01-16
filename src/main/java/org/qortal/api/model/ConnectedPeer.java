@@ -29,8 +29,6 @@ public class ConnectedPeer {
     public String address;
     public String version;
 
-    public String nodeId;
-
     public Integer lastHeight;
     @Schema(example = "base58")
     public byte[] lastBlockSignature;
@@ -54,7 +52,6 @@ public class ConnectedPeer {
         this.address = peerData.getAddress().toString();
 
         this.version = peer.getPeersVersionString();
-        this.nodeId = peer.getPeersNodeId();
         this.connectionId = peer.getPeerConnectionId();
         if (peer.getConnectionEstablishedTime() > 0) {
             long age = (System.currentTimeMillis() - peer.getConnectionEstablishedTime());
