@@ -19,6 +19,7 @@ import org.qortal.crosschain.AddressInfo;
 import org.qortal.crosschain.Bitcoin;
 import org.qortal.crosschain.ForeignBlockchainException;
 import org.qortal.crosschain.SimpleTransaction;
+import org.qortal.crosschain.ServerConfigurationInfo;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.GET;
@@ -189,45 +190,6 @@ public class CrossChainBitcoinResource {
 	}
 
 	@POST
-	@Path("/unusedaddress")
-	@Operation(
-		summary = "Returns first unused address for hierarchical, deterministic BIP32 wallet",
-		description = "Supply BIP32 'm' private/public key in base58, starting with 'xprv'/'xpub' for mainnet, 'tprv'/'tpub' for testnet",
-		requestBody = @RequestBody(
-			required = true,
-			content = @Content(
-				mediaType = MediaType.TEXT_PLAIN,
-				schema = @Schema(
-					type = "string",
-					description = "BIP32 'm' private/public key in base58",
-					example = "tpubD6NzVbkrYhZ4XTPc4btCZ6SMgn8CxmWkj6VBVZ1tfcJfMq4UwAjZbG8U74gGSypL9XBYk2R2BLbDBe8pcEyBKM1edsGQEPKXNbEskZozeZc"
-				)
-			)
-		),
-		responses = {
-			@ApiResponse(
-				content = @Content(array = @ArraySchema( schema = @Schema( implementation = SimpleTransaction.class ) ) )
-			)
-		}
-	)
-	@ApiErrors({ApiError.INVALID_PRIVATE_KEY, ApiError.FOREIGN_BLOCKCHAIN_NETWORK_ISSUE})
-	@SecurityRequirement(name = "apiKey")
-	public String getUnusedBitcoinReceiveAddress(@HeaderParam(Security.API_KEY_HEADER) String apiKey, String key58) {
-		Security.checkApiCallAllowed(request);
-
-		Bitcoin bitcoin = Bitcoin.getInstance();
-
-		if (!bitcoin.isValidDeterministicKey(key58))
-			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_PRIVATE_KEY);
-
-		try {
-			return bitcoin.getUnusedReceiveAddress(key58);
-		} catch (ForeignBlockchainException e) {
-			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.FOREIGN_BLOCKCHAIN_NETWORK_ISSUE);
-		}
-	}
-
-	@POST
 	@Path("/send")
 	@Operation(
 		summary = "Sends BTC from hierarchical, deterministic BIP32 wallet to specific address",
@@ -283,4 +245,24 @@ public class CrossChainBitcoinResource {
 		return spendTransaction.getTxId().toString();
 	}
 
+	@GET
+	@Path("/serverinfos")
+	@Operation(
+			summary = "Returns current Bitcoin server configuration",
+			description = "Returns current Bitcoin server locations and use status",
+			responses = {
+					@ApiResponse(
+							content = @Content(
+									mediaType = MediaType.APPLICATION_JSON,
+									schema = @Schema(
+											implementation = ServerConfigurationInfo.class
+									)
+							)
+					)
+			}
+	)
+	public ServerConfigurationInfo getServerConfiguration() {
+
+		return CrossChainUtils.buildServerConfigurationInfo(Bitcoin.getInstance());
+	}
 }
