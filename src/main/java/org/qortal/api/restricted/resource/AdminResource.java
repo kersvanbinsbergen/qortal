@@ -30,6 +30,7 @@ import org.qortal.controller.RestartNode;
 import org.qortal.controller.Synchronizer;
 import org.qortal.controller.Synchronizer.SynchronizationResult;
 import org.qortal.controller.repository.BlockArchiveRebuilder;
+import org.qortal.controller.UpdateNode;
 import org.qortal.data.account.MintingAccountData;
 import org.qortal.data.account.RewardShareData;
 import org.qortal.network.Network;
@@ -283,6 +284,37 @@ public class AdminResource {
 			}
 
 			BootstrapNode.attemptToBootstrap();
+
+		}).start();
+
+		return "true";
+	}
+
+	@GET
+	@Path("/update")
+	@Operation(
+		summary = "Update node",
+		description = "Delete and download new qortal.jar file",
+		responses = {
+			@ApiResponse(
+				description = "\"true\"",
+				content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(type = "string"))
+			)
+		}
+	)
+	@SecurityRequirement(name = "apiKey")
+	public String update(@HeaderParam(Security.API_KEY_HEADER) String apiKey) {
+		Security.checkApiCallAllowed(request);
+
+		new Thread(() -> {
+			// Short sleep to allow HTTP response body to be emitted
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				// Not important
+			}
+
+			UpdateNode.attemptToUpdate();
 
 		}).start();
 

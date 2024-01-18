@@ -2,7 +2,7 @@ package org.qortal.controller;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.qortal.ApplyRestart;
+import org.qortal.ApplyUpdate;
 import org.qortal.globalization.Translator;
 import org.qortal.gui.SysTray;
 import org.qortal.repository.RepositoryManager;
@@ -20,15 +20,16 @@ import java.util.stream.Collectors;
 
 /* NOTE: It is CRITICAL that we use OpenJDK and not Java SE because our uber jar repacks BouncyCastle which, in turn, unsigns BC causing it to be rejected as a security provider by Java SE. */
 
-public class RestartNode {
+public class UpdateNode {
 
 	public static final String JAR_FILENAME = "qortal.jar";
+	public static final String NEW_JAR_FILENAME = "new-" + JAR_FILENAME;
 	public static final String AGENTLIB_JVM_HOLDER_ARG = "-DQORTAL_agentlib=";
 
-	private static final Logger LOGGER = LogManager.getLogger(RestartNode.class);
+	private static final Logger LOGGER = LogManager.getLogger(UpdateNode.class);
 
-	public static boolean attemptToRestart() {
-		LOGGER.info(String.format("Restarting node..."));
+	public static boolean attemptToUpdate() {
+		LOGGER.info(String.format("Updating node..."));
 
 		// Give repository a chance to backup in case things go badly wrong (if enabled)
 		if (Settings.getInstance().getRepositoryBackupInterval() > 0) {
@@ -39,11 +40,11 @@ public class RestartNode {
 
 			} catch (TimeoutException e) {
 				LOGGER.info("Attempt to backup repository failed due to timeout: {}", e.getMessage());
-				// Continue with the node restart anyway...
+				// Continue with the update anyway...
 			}
 		}
 
-		// Call ApplyRestart to end this process
+		// Call ApplyUpdate to end this process
 		String javaHome = System.getProperty("java.home");
 		LOGGER.debug(String.format("Java home: %s", javaHome));
 
@@ -52,6 +53,7 @@ public class RestartNode {
 
 		try {
 			List<String> javaCmd = new ArrayList<>();
+
 			// Java runtime binary itself
 			javaCmd.add(javaBinary.toString());
 
@@ -67,18 +69,18 @@ public class RestartNode {
 			// These are typically added by the AdvancedInstaller Java launcher EXE
 			javaCmd.removeAll(Arrays.asList("abort", "exit", "vfprintf"));
 
-			// Call ApplyRestart using JAR
-			javaCmd.addAll(Arrays.asList("-cp", JAR_FILENAME, ApplyRestart.class.getCanonicalName()));
+			// Call ApplyUpdate using JAR
+			javaCmd.addAll(Arrays.asList("-cp", NEW_JAR_FILENAME, ApplyUpdate.class.getCanonicalName()));
 
 			// Add command-line args saved from start-up
 			String[] savedArgs = Controller.getInstance().getSavedArgs();
 			if (savedArgs != null)
 				javaCmd.addAll(Arrays.asList(savedArgs));
 
-			LOGGER.debug(String.format("Restarting node with: %s", String.join(" ", javaCmd)));
+			LOGGER.info(String.format("Restarting node with: %s", String.join(" ", javaCmd)));
 
-			SysTray.getInstance().showMessage(Translator.INSTANCE.translate("SysTray", "RESTARTING_NODE"),
-					Translator.INSTANCE.translate("SysTray", "APPLYING_RESTARTING_NODE"),
+			SysTray.getInstance().showMessage(Translator.INSTANCE.translate("SysTray", "AUTO_UPDATE"),
+					Translator.INSTANCE.translate("SysTray", "APPLYING_UPDATE_AND_RESTARTING"),
 					MessageType.INFO);
 
 			ProcessBuilder processBuilder = new ProcessBuilder(javaCmd);
@@ -96,7 +98,7 @@ public class RestartNode {
 		} catch (Exception e) {
 			LOGGER.error(String.format("Failed to restart node: %s", e.getMessage()));
 
-			return true; // repo was okay, even if applying restart failed
+			return true; // repo was okay, even if applying update failed
 		}
 	}
 }
