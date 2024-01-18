@@ -43,7 +43,12 @@ public class AutoUpdate extends Thread {
 	public static final String AGENTLIB_JVM_HOLDER_ARG = "-DQORTAL_agentlib=";
 
 	private static final Logger LOGGER = LogManager.getLogger(AutoUpdate.class);
-	private static final long CHECK_INTERVAL = 20 * 60 * 1000L; // ms
+	
+	// Disabled for testing
+	// private static final long CHECK_INTERVAL = 20 * 60 * 1000L; // ms
+
+	// Test using a dummy value
+	private static final long CHECK_INTERVAL = 10 * 1000L; // ms
 
 	private static final int DEV_GROUP_ID = 1;
 	private static final int UPDATE_SERVICE = 1;
@@ -72,7 +77,12 @@ public class AutoUpdate extends Thread {
 	public void run() {
 		Thread.currentThread().setName("Auto-update");
 
-		long buildTimestamp = Controller.getInstance().getBuildTimestamp() * 1000L;
+		// Disabled for testing
+		// long buildTimestamp = Controller.getInstance().getBuildTimestamp() * 1000L;
+
+		// Test using a dummy timestamp older than current autoupdate
+		long buildTimestamp = 1234567890L;
+
 		boolean attemptedUpdate = false;
 
 		while (!isStopping) {
@@ -102,6 +112,7 @@ public class AutoUpdate extends Thread {
 					continue;
 
 				// Transaction needs to be newer than this build
+				LOGGER.info(String.format("Current build timestamp: %d.  Autoupdate tx timestamp: %d.", buildTimestamp, transactionData.getTimestamp()));
 				if (transactionData.getTimestamp() <= buildTimestamp)
 					continue;
 
@@ -120,6 +131,7 @@ public class AutoUpdate extends Thread {
 				ByteBuffer byteBuffer = ByteBuffer.wrap(data);
 
 				long updateTimestamp = byteBuffer.getLong();
+				LOGGER.info(String.format("Current build timestamp: %d.  Update build timestamp: %d.", buildTimestamp, updateTimestamp));
 				if (updateTimestamp <= buildTimestamp)
 					continue; // update is the same, or older, than current code
 
