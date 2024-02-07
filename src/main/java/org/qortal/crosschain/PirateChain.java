@@ -49,10 +49,39 @@ public class PirateChain extends Bitcoiny {
 
 			@Override
 			public Collection<Server> getServers() {
-				return Arrays.asList(
+				List<Server> defaultServers = Arrays.asList(
 					// Servers chosen on NO BASIS WHATSOEVER from various sources!
 					new Server("lightd.pirate.black", Server.ConnectionType.SSL, 443)
 				);
+
+				List<Server> availableServers = new ArrayList<>();
+				Boolean useDefault = Settings.getInstance().getUsePirateChainDefaults();
+				if (useDefault == true) {
+					availableServers.addAll(defaultServers);
+				}
+
+				String[] settingsList = Settings.getInstance().getPirateChainServers();
+				if (settingsList != null) {
+					List<Server> customServers = new ArrayList<>();
+					for (String setting : settingsList) {
+						String[] colonParts = setting.split(":");
+						if (colonParts.length == 2) {
+							String[] commaParts = colonParts[1].split(",");
+							if (commaParts.length == 2) {
+								String hostname = colonParts[0];
+								int port = Integer.parseInt(commaParts[0].trim());
+								String typeString = commaParts[1].trim().toUpperCase();
+								Server.ConnectionType type = Server.ConnectionType.SSL;
+								if (typeString.equals("TCP")) {
+									type = Server.ConnectionType.TCP;
+								}
+								customServers.add(new Server(hostname, type, port));
+							}
+						}
+					}
+					availableServers.addAll(customServers);
+				}
+				return availableServers;
 			}
 
 			@Override
