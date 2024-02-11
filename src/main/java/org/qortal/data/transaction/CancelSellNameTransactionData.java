@@ -23,6 +23,12 @@ public class CancelSellNameTransactionData extends TransactionData {
 	@XmlTransient
 	@Schema(hidden = true)
 	private Long salePrice;
+	@XmlTransient
+	@Schema(hidden = true)
+	private boolean isPrivateSale;
+	@XmlTransient
+	@Schema(hidden = true)
+	private String saleRecipient;
 
 	// Constructors
 
@@ -35,17 +41,19 @@ public class CancelSellNameTransactionData extends TransactionData {
 		this.creatorPublicKey = this.ownerPublicKey;
 	}
 
-	public CancelSellNameTransactionData(BaseTransactionData baseTransactionData, String name, Long salePrice) {
+	public CancelSellNameTransactionData(BaseTransactionData baseTransactionData, String name, Long salePrice, boolean isPrivateSale, String saleRecipient) {
 		super(TransactionType.CANCEL_SELL_NAME, baseTransactionData);
 
 		this.ownerPublicKey = baseTransactionData.creatorPublicKey;
 		this.name = name;
 		this.salePrice = salePrice;
+		this.isPrivateSale = isPrivateSale;
+		this.saleRecipient = saleRecipient;
 	}
 
 	/** From network/API */
 	public CancelSellNameTransactionData(BaseTransactionData baseTransactionData, String name) {
-		this(baseTransactionData, name, null);
+		this(baseTransactionData, name, null, false, null);
 	}
 
 	// Getters / setters
@@ -64,6 +72,22 @@ public class CancelSellNameTransactionData extends TransactionData {
 
 	public void setSalePrice(Long salePrice) {
 		this.salePrice = salePrice;
+	}
+
+	public boolean getIsPrivateSale() {
+		return this.isPrivateSale;
+	}
+
+	public void setIsPrivateSale(boolean isPrivateSale) {
+		this.isPrivateSale = isPrivateSale;
+	}
+
+	public String getSaleRecipient() {
+		return this.saleRecipient;
+	}
+
+	public void setSaleRecipient(String saleRecipient) {
+		this.saleRecipient = saleRecipient;
 	}
 
 }

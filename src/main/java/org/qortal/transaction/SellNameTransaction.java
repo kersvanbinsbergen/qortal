@@ -4,6 +4,7 @@ import com.google.common.base.Utf8;
 import org.qortal.account.Account;
 import org.qortal.asset.Asset;
 import org.qortal.controller.repository.NamesDatabaseIntegrityCheck;
+import org.qortal.crypto.Crypto;
 import org.qortal.data.naming.NameData;
 import org.qortal.data.transaction.SellNameTransactionData;
 import org.qortal.data.transaction.TransactionData;
@@ -74,9 +75,28 @@ public class SellNameTransaction extends Transaction {
 		if (!owner.getAddress().equals(nameData.getOwner()))
 			return ValidationResult.INVALID_NAME_OWNER;
 
-		// Check amount is positive
-		if (this.sellNameTransactionData.getAmount() <= 0)
-			return ValidationResult.NEGATIVE_AMOUNT;
+		// Check for private sale
+		if (this.sellNameTransactionData.getIsPrivateSale()) {
+
+			// Check recipient address is valid
+			if (!Crypto.isValidAddress(this.sellNameTransactionData.getSaleRecipient()))
+				return ValidationResult.INVALID_ADDRESS;
+
+			// Check recipient is not already name owner
+			if (owner.getAddress().equals(this.sellNameTransactionData.getSaleRecipient()))
+				return ValidationResult.BUYER_ALREADY_OWNER;
+
+			// Check amount is not negative (allow 0 for private sales)
+			if (this.sellNameTransactionData.getAmount() < 0)
+				return ValidationResult.NEGATIVE_AMOUNT;
+
+		// ...for public sales
+		} else {
+
+			// Check amount is positive (don't allow 0 for public sales)
+			if (this.sellNameTransactionData.getAmount() <= 0)
+				return ValidationResult.NEGATIVE_AMOUNT;
+		}
 
 		// Check amount within bounds
 		if (this.sellNameTransactionData.getAmount() >= MAX_AMOUNT)

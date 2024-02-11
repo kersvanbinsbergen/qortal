@@ -57,6 +57,13 @@ public class NamesMessage extends Message {
 					bytes.write(Longs.toByteArray(nameData.getSalePrice()));
 				}
 
+				int isPrivateSale = nameData.getIsPrivateSale() ? 1 : 0;
+				bytes.write(Ints.toByteArray(isPrivateSale));
+
+				if (nameData.getIsPrivateSale()) {
+					Serialization.serializeAddress(bytes, nameData.getSaleRecipient());
+				}
+
 				bytes.write(nameData.getReference());
 
 				bytes.write(Ints.toByteArray(nameData.getCreationGroupId()));
@@ -112,13 +119,20 @@ public class NamesMessage extends Message {
 					salePrice = bytes.getLong();
 				}
 
+				boolean isPrivateSale = (bytes.getInt() == 1);
+
+				String saleRecipient = null;
+				if (isPrivateSale) {
+					saleRecipient = Serialization.deserializeAddress(bytes);
+				}
+
 				byte[] reference = new byte[SIGNATURE_LENGTH];
 				bytes.get(reference);
 
 				int creationGroupId = bytes.getInt();
 
 				NameData nameData = new NameData(name, reducedName, owner, data, registered, updated,
-						isForSale, salePrice, reference, creationGroupId);
+						isForSale, salePrice, isPrivateSale, saleRecipient, reference, creationGroupId);
 				nameDataList.add(nameData);
 			}
 

@@ -1052,6 +1052,20 @@ public class HSQLDBDatabaseUpdates {
 					stmt.execute("UPDATE Accounts SET blocks_minted_penalty = -5000000 WHERE blocks_minted_penalty < 0");
 					break;
 
+				case 50:
+					// For private name sales
+					stmt.execute("ALTER TABLE Names ADD is_private_sale BOOLEAN NOT NULL DEFAULT FALSE");
+					stmt.execute("ALTER TABLE Names ADD sale_recipient QortalAddress");
+
+					stmt.execute("ALTER TABLE SellNameTransactions ADD is_private_sale BOOLEAN NOT NULL DEFAULT FALSE");
+					stmt.execute("ALTER TABLE SellNameTransactions ADD sale_recipient QortalAddress");
+
+					stmt.execute("ALTER TABLE CancelSellNameTransactions ADD is_private_sale BOOLEAN NOT NULL DEFAULT FALSE");
+					stmt.execute("ALTER TABLE CancelSellNameTransactions ADD sale_recipient QortalAddress");
+
+					stmt.execute("ALTER TABLE BuyNameTransactions ADD is_private_sale BOOLEAN NOT NULL DEFAULT FALSE");
+					break;
+
 				default:
 					// nothing to do
 					return false;

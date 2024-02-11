@@ -17,7 +17,7 @@ public class HSQLDBBuyNameTransactionRepository extends HSQLDBTransactionReposit
 	}
 
 	TransactionData fromBase(BaseTransactionData baseTransactionData) throws DataException {
-		String sql = "SELECT name, amount, seller, name_reference FROM BuyNameTransactions WHERE signature = ?";
+		String sql = "SELECT name, amount, seller, is_private_sale, name_reference FROM BuyNameTransactions WHERE signature = ?";
 
 		try (ResultSet resultSet = this.repository.checkedExecute(sql, baseTransactionData.getSignature())) {
 			if (resultSet == null)
@@ -26,9 +26,10 @@ public class HSQLDBBuyNameTransactionRepository extends HSQLDBTransactionReposit
 			String name = resultSet.getString(1);
 			long amount = resultSet.getLong(2);
 			String seller = resultSet.getString(3);
-			byte[] nameReference = resultSet.getBytes(4);
+			boolean isPrivateSale = resultSet.getBoolean(4);
+			byte[] nameReference = resultSet.getBytes(5);
 
-			return new BuyNameTransactionData(baseTransactionData, name, amount, seller, nameReference);
+			return new BuyNameTransactionData(baseTransactionData, name, amount, seller, isPrivateSale, nameReference);
 		} catch (SQLException e) {
 			throw new DataException("Unable to fetch buy name transaction from repository", e);
 		}
@@ -42,7 +43,7 @@ public class HSQLDBBuyNameTransactionRepository extends HSQLDBTransactionReposit
 
 		saveHelper.bind("signature", buyNameTransactionData.getSignature()).bind("buyer", buyNameTransactionData.getBuyerPublicKey())
 				.bind("name", buyNameTransactionData.getName()).bind("amount", buyNameTransactionData.getAmount())
-				.bind("seller", buyNameTransactionData.getSeller()).bind("name_reference", buyNameTransactionData.getNameReference());
+				.bind("seller", buyNameTransactionData.getSeller()).bind("is_private_sale", buyNameTransactionData.getIsPrivateSale()).bind("name_reference", buyNameTransactionData.getNameReference());
 
 		try {
 			saveHelper.execute(this.repository);

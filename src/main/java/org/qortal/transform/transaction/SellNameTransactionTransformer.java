@@ -19,7 +19,7 @@ public class SellNameTransactionTransformer extends TransactionTransformer {
 	// Property lengths
 	private static final int NAME_SIZE_LENGTH = INT_LENGTH;
 
-	private static final int EXTRAS_LENGTH = NAME_SIZE_LENGTH + AMOUNT_LENGTH;
+	private static final int EXTRAS_LENGTH = NAME_SIZE_LENGTH + AMOUNT_LENGTH + BOOLEAN_LENGTH;
 
 	protected static final TransactionLayout layout;
 
@@ -33,6 +33,8 @@ public class SellNameTransactionTransformer extends TransactionTransformer {
 		layout.add("name length", TransformationType.INT);
 		layout.add("name", TransformationType.STRING);
 		layout.add("sale price", TransformationType.AMOUNT);
+		layout.add("is private sale", TransformationType.BOOLEAN);
+		layout.add("sale recipient", TransformationType.ADDRESS);
 		layout.add("fee", TransformationType.AMOUNT);
 		layout.add("signature", TransformationType.SIGNATURE);
 	}
@@ -51,6 +53,12 @@ public class SellNameTransactionTransformer extends TransactionTransformer {
 
 		long amount = byteBuffer.getLong();
 
+		boolean isPrivateSale = byteBuffer.get() != 0;
+
+		String saleRecipient = null;
+		if (isPrivateSale)
+			saleRecipient = Serialization.deserializeAddress(byteBuffer);
+
 		long fee = byteBuffer.getLong();
 
 		byte[] signature = new byte[SIGNATURE_LENGTH];
@@ -58,11 +66,14 @@ public class SellNameTransactionTransformer extends TransactionTransformer {
 
 		BaseTransactionData baseTransactionData = new BaseTransactionData(timestamp, txGroupId, reference, ownerPublicKey, fee, signature);
 
-		return new SellNameTransactionData(baseTransactionData, name, amount);
+		return new SellNameTransactionData(baseTransactionData, name, amount, isPrivateSale, saleRecipient);
 	}
 
 	public static int getDataLength(TransactionData transactionData) throws TransformationException {
 		SellNameTransactionData sellNameTransactionData = (SellNameTransactionData) transactionData;
+
+		if (sellNameTransactionData.getIsPrivateSale())
+			return getBaseLength(transactionData) + EXTRAS_LENGTH + ADDRESS_LENGTH + Utf8.encodedLength(sellNameTransactionData.getName());
 
 		return getBaseLength(transactionData) + EXTRAS_LENGTH + Utf8.encodedLength(sellNameTransactionData.getName());
 	}
@@ -78,6 +89,11 @@ public class SellNameTransactionTransformer extends TransactionTransformer {
 			Serialization.serializeSizedString(bytes, sellNameTransactionData.getName());
 
 			bytes.write(Longs.toByteArray(sellNameTransactionData.getAmount()));
+
+			bytes.write((byte) (sellNameTransactionData.getIsPrivateSale() ? 1 : 0));
+
+			if (sellNameTransactionData.getIsPrivateSale())
+				Serialization.serializeAddress(bytes, sellNameTransactionData.getSaleRecipient());
 
 			bytes.write(Longs.toByteArray(sellNameTransactionData.getFee()));
 

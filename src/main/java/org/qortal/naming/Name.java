@@ -162,6 +162,9 @@ public class Name {
 		// Mark as for-sale and set price
 		this.nameData.setIsForSale(true);
 		this.nameData.setSalePrice(sellNameTransactionData.getAmount());
+		this.nameData.setIsPrivateSale(sellNameTransactionData.getIsPrivateSale());
+		if (sellNameTransactionData.getIsPrivateSale())
+			this.nameData.setSaleRecipient(sellNameTransactionData.getSaleRecipient());
 
 		// Save sale info into repository
 		this.repository.getNameRepository().save(this.nameData);
@@ -171,6 +174,8 @@ public class Name {
 		// Mark not for-sale and unset price
 		this.nameData.setIsForSale(false);
 		this.nameData.setSalePrice(null);
+		this.nameData.setIsPrivateSale(false);
+		this.nameData.setSaleRecipient(null);
 
 		// Save no-sale info into repository
 		this.repository.getNameRepository().save(this.nameData);
@@ -183,6 +188,8 @@ public class Name {
 		// Mark not for-sale
 		this.nameData.setIsForSale(false);
 		this.nameData.setSalePrice(null);
+		this.nameData.setIsPrivateSale(false);
+		this.nameData.setSaleRecipient(null);
 
 		// Save sale info into repository
 		this.repository.getNameRepository().save(this.nameData);
@@ -192,6 +199,9 @@ public class Name {
 		// Mark as for-sale using existing price
 		this.nameData.setIsForSale(true);
 		this.nameData.setSalePrice(cancelSellNameTransactionData.getSalePrice());
+		this.nameData.setIsPrivateSale(cancelSellNameTransactionData.getIsPrivateSale());
+		if (cancelSellNameTransactionData.getIsPrivateSale())
+			this.nameData.setSaleRecipient(cancelSellNameTransactionData.getSaleRecipient());
 
 		// Save no-sale info into repository
 		this.repository.getNameRepository().save(this.nameData);
@@ -234,6 +244,9 @@ public class Name {
 		// Mark as for-sale using existing price
 		this.nameData.setIsForSale(true);
 		this.nameData.setSalePrice(buyNameTransactionData.getAmount());
+		this.nameData.setIsPrivateSale(buyNameTransactionData.getIsPrivateSale());
+		if (buyNameTransactionData.getIsPrivateSale())
+			this.nameData.setSaleRecipient(Crypto.toAddress(buyNameTransactionData.getCreatorPublicKey()));
 
 		// Previous name-changing reference is taken from this transaction's cached copy
 		this.nameData.setReference(buyNameTransactionData.getNameReference());

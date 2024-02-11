@@ -25,6 +25,12 @@ public class SellNameTransactionData extends TransactionData {
 	@XmlJavaTypeAdapter(value = org.qortal.api.AmountTypeAdapter.class)
 	private long amount;
 
+	@Schema(description = "if sale is for a specific buyer", example = "true")
+	private boolean isPrivateSale;
+
+	@Schema(description = "intended buyer's address", example = "QgV4s3xnzLhVBEJxcYui4u4q11yhUHsd9v")
+	private String saleRecipient;
+
 	// Constructors
 
 	// For JAXB
@@ -42,6 +48,18 @@ public class SellNameTransactionData extends TransactionData {
 		this.ownerPublicKey = baseTransactionData.creatorPublicKey;
 		this.name = name;
 		this.amount = amount;
+		this.isPrivateSale = false;
+		this.saleRecipient = null;
+	}
+
+	public SellNameTransactionData(BaseTransactionData baseTransactionData, String name, long amount, boolean isPrivateSale, String saleRecipient) {
+		super(TransactionType.SELL_NAME, baseTransactionData);
+
+		this.ownerPublicKey = baseTransactionData.creatorPublicKey;
+		this.name = name;
+		this.amount = amount;
+		this.isPrivateSale = isPrivateSale;
+		this.saleRecipient = saleRecipient;
 	}
 
 	// Getters / setters
@@ -56,6 +74,14 @@ public class SellNameTransactionData extends TransactionData {
 
 	public long getAmount() {
 		return this.amount;
+	}
+
+	public boolean getIsPrivateSale() {
+		return this.isPrivateSale;
+	}
+
+	public String getSaleRecipient() {
+		return this.isPrivateSale ? this.saleRecipient : null;
 	}
 
 }

@@ -91,6 +91,23 @@ public class BuyNameTransaction extends Transaction {
 		if (this.buyNameTransactionData.getAmount() != nameData.getSalePrice())
 			return ValidationResult.INVALID_AMOUNT;
 
+		// Check for private sale
+		if (nameData.getIsPrivateSale()) {
+
+			// Check buyer address matches expected recipient
+			if (!buyer.getAddress().equals(nameData.getSaleRecipient()))
+				return ValidationResult.INVALID_NAME_OWNER;
+
+			// Check buyer transaction is set to private
+			if (!this.buyNameTransactionData.getIsPrivateSale())
+				return ValidationResult.INVALID_RETURN;
+		} else {
+
+			// Check buyer transaction matches if not private
+			if (this.buyNameTransactionData.getIsPrivateSale())
+				return ValidationResult.INVALID_RETURN;
+		}
+
 		// Check buyer has enough funds
 		if (buyer.getConfirmedBalance(Asset.QORT) < this.buyNameTransactionData.getFee())
 			return ValidationResult.NO_BALANCE;

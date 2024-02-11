@@ -17,7 +17,7 @@ public class HSQLDBCancelSellNameTransactionRepository extends HSQLDBTransaction
 	}
 
 	TransactionData fromBase(BaseTransactionData baseTransactionData) throws DataException {
-		String sql = "SELECT name, sale_price FROM CancelSellNameTransactions WHERE signature = ?";
+		String sql = "SELECT name, sale_price, is_private_sale, sale_recipient FROM CancelSellNameTransactions WHERE signature = ?";
 
 		try (ResultSet resultSet = this.repository.checkedExecute(sql, baseTransactionData.getSignature())) {
 			if (resultSet == null)
@@ -25,8 +25,12 @@ public class HSQLDBCancelSellNameTransactionRepository extends HSQLDBTransaction
 
 			String name = resultSet.getString(1);
 			Long salePrice = resultSet.getLong(2);
+			boolean isPrivateSale = resultSet.getBoolean(3);
+			String saleRecipient = resultSet.getString(4);
+			if (!isPrivateSale)
+				saleRecipient = null;
 
-			return new CancelSellNameTransactionData(baseTransactionData, name, salePrice);
+			return new CancelSellNameTransactionData(baseTransactionData, name, salePrice, isPrivateSale, saleRecipient);
 		} catch (SQLException e) {
 			throw new DataException("Unable to fetch cancel sell name transaction from repository", e);
 		}
@@ -39,7 +43,7 @@ public class HSQLDBCancelSellNameTransactionRepository extends HSQLDBTransaction
 		HSQLDBSaver saveHelper = new HSQLDBSaver("CancelSellNameTransactions");
 
 		saveHelper.bind("signature", cancelSellNameTransactionData.getSignature()).bind("owner", cancelSellNameTransactionData.getOwnerPublicKey()).bind("name",
-				cancelSellNameTransactionData.getName()).bind("sale_price", cancelSellNameTransactionData.getSalePrice());
+				cancelSellNameTransactionData.getName()).bind("sale_price", cancelSellNameTransactionData.getSalePrice()).bind("is_private_sale", cancelSellNameTransactionData.getIsPrivateSale()).bind("sale_recipient", cancelSellNameTransactionData.getSaleRecipient());
 
 		try {
 			saveHelper.execute(this.repository);

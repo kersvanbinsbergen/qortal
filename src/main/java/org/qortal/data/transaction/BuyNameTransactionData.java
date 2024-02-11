@@ -32,6 +32,9 @@ public class BuyNameTransactionData extends TransactionData {
 	// For internal use when orphaning
 	@XmlTransient
 	@Schema(hidden = true)
+	private boolean isPrivateSale;
+	@XmlTransient
+	@Schema(hidden = true)
 	private byte[] nameReference;
 
 	// Constructors
@@ -47,19 +50,23 @@ public class BuyNameTransactionData extends TransactionData {
 
 	/** From repository */
 	public BuyNameTransactionData(BaseTransactionData baseTransactionData,
-			String name, long amount, String seller, byte[] nameReference) {
+			String name, long amount, String seller, boolean isPrivateSale, byte[] nameReference) {
 		super(TransactionType.BUY_NAME, baseTransactionData);
 
 		this.buyerPublicKey = baseTransactionData.creatorPublicKey;
 		this.name = name;
 		this.amount = amount;
 		this.seller = seller;
+		this.isPrivateSale = isPrivateSale;
 		this.nameReference = nameReference;
 	}
 
 	/** From network/API */
+	public BuyNameTransactionData(BaseTransactionData baseTransactionData, String name, long amount, String seller, boolean isPrivateSale) {
+		this(baseTransactionData, name, amount, seller, isPrivateSale, null);
+	}
 	public BuyNameTransactionData(BaseTransactionData baseTransactionData, String name, long amount, String seller) {
-		this(baseTransactionData, name, amount, seller, null);
+		this(baseTransactionData, name, amount, seller, false, null);
 	}
 
 	// Getters / setters
@@ -78,6 +85,14 @@ public class BuyNameTransactionData extends TransactionData {
 
 	public String getSeller() {
 		return this.seller;
+	}
+
+	public boolean getIsPrivateSale() {
+		return this.isPrivateSale;
+	}
+
+	public void setIsPrivateSale(boolean isPrivateSale) {
+		this.isPrivateSale = isPrivateSale;
 	}
 
 	public byte[] getNameReference() {

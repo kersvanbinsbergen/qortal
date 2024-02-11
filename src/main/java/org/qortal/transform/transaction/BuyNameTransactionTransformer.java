@@ -20,7 +20,7 @@ public class BuyNameTransactionTransformer extends TransactionTransformer {
 	private static final int NAME_SIZE_LENGTH = INT_LENGTH;
 	private static final int SELLER_LENGTH = ADDRESS_LENGTH;
 
-	private static final int EXTRAS_LENGTH = NAME_SIZE_LENGTH + AMOUNT_LENGTH + SELLER_LENGTH;
+	private static final int EXTRAS_LENGTH = NAME_SIZE_LENGTH + AMOUNT_LENGTH + SELLER_LENGTH + BOOLEAN_LENGTH;
 
 	protected static final TransactionLayout layout;
 
@@ -35,6 +35,7 @@ public class BuyNameTransactionTransformer extends TransactionTransformer {
 		layout.add("name", TransformationType.STRING);
 		layout.add("buy price", TransformationType.AMOUNT);
 		layout.add("seller", TransformationType.ADDRESS);
+		layout.add("is private sale", TransformationType.BOOLEAN);
 		layout.add("fee", TransformationType.AMOUNT);
 		layout.add("signature", TransformationType.SIGNATURE);
 	}
@@ -55,6 +56,8 @@ public class BuyNameTransactionTransformer extends TransactionTransformer {
 
 		String seller = Serialization.deserializeAddress(byteBuffer);
 
+		boolean isPrivateSale = byteBuffer.get() != 0;
+
 		long fee = byteBuffer.getLong();
 
 		byte[] signature = new byte[SIGNATURE_LENGTH];
@@ -62,7 +65,7 @@ public class BuyNameTransactionTransformer extends TransactionTransformer {
 
 		BaseTransactionData baseTransactionData = new BaseTransactionData(timestamp, txGroupId, reference, buyerPublicKey, fee, signature);
 
-		return new BuyNameTransactionData(baseTransactionData, name, amount, seller);
+		return new BuyNameTransactionData(baseTransactionData, name, amount, seller, isPrivateSale);
 	}
 
 	public static int getDataLength(TransactionData transactionData) throws TransformationException {
@@ -84,6 +87,8 @@ public class BuyNameTransactionTransformer extends TransactionTransformer {
 			bytes.write(Longs.toByteArray(buyNameTransactionData.getAmount()));
 
 			Serialization.serializeAddress(bytes, buyNameTransactionData.getSeller());
+
+			bytes.write((byte) (buyNameTransactionData.getIsPrivateSale() ? 1 : 0));
 
 			bytes.write(Longs.toByteArray(buyNameTransactionData.getFee()));
 

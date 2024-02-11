@@ -30,6 +30,10 @@ public class NameData {
 	@XmlJavaTypeAdapter(value = org.qortal.api.AmountTypeAdapter.class)
 	private Long salePrice;
 
+	private boolean isPrivateSale;
+
+	private String saleRecipient; // Not always present
+
 	// For internal use - no need to expose this via API
 	@XmlTransient
 	@Schema(hidden = true)
@@ -49,6 +53,7 @@ public class NameData {
 	// Typically used when fetching from repository
 	public NameData(String name, String reducedName, String owner, String data, long registered,
 			Long updated, boolean isForSale, Long salePrice,
+			boolean isPrivateSale, String saleRecipient,
 			byte[] reference, int creationGroupId) {
 		this.name = name;
 		this.reducedName = reducedName;
@@ -59,12 +64,14 @@ public class NameData {
 		this.reference = reference;
 		this.isForSale = isForSale;
 		this.salePrice = salePrice;
+		this.isPrivateSale = isPrivateSale;
+		this.saleRecipient = saleRecipient;
 		this.creationGroupId = creationGroupId;
 	}
 
 	// Typically used when registering a new name
 	public NameData(String name, String reducedName, String owner, String data, long registered, byte[] reference, int creationGroupId) {
-		this(name, reducedName, owner, data, registered, null, false, null, reference, creationGroupId);
+		this(name, reducedName, owner, data, registered, null, false, null, false, null, reference, creationGroupId);
 	}
 
 	// Getters / setters
@@ -127,6 +134,22 @@ public class NameData {
 
 	public void setSalePrice(Long salePrice) {
 		this.salePrice = salePrice;
+	}
+
+	public boolean getIsPrivateSale() {
+		return this.isPrivateSale;
+	}
+
+	public void setIsPrivateSale(boolean isPrivateSale) {
+		this.isPrivateSale = isPrivateSale;
+	}
+
+	public String getSaleRecipient() {
+		return this.saleRecipient;
+	}
+
+	public void setSaleRecipient(String saleRecipient) {
+		this.saleRecipient = saleRecipient;
 	}
 
 	public byte[] getReference() {
