@@ -14,7 +14,7 @@ import org.qortal.api.ApiErrors;
 import org.qortal.api.ApiExceptionFactory;
 import org.qortal.api.Security;
 import org.qortal.api.model.crosschain.AddressRequest;
-import org.qortal.api.model.crosschain.DogecoinSendRequest;
+import org.qortal.api.model.crosschain.BitcoinySendRequest;
 import org.qortal.crosschain.AddressInfo;
 import org.qortal.crosschain.Dogecoin;
 import org.qortal.crosschain.ForeignBlockchainException;
@@ -199,7 +199,7 @@ public class CrossChainDogecoinResource {
 			content = @Content(
 				mediaType = MediaType.APPLICATION_JSON,
 				schema = @Schema(
-					implementation = DogecoinSendRequest.class
+					implementation = BitcoinySendRequest.class
 				)
 			)
 		),
@@ -211,10 +211,10 @@ public class CrossChainDogecoinResource {
 	)
 	@ApiErrors({ApiError.INVALID_PRIVATE_KEY, ApiError.INVALID_CRITERIA, ApiError.INVALID_ADDRESS, ApiError.FOREIGN_BLOCKCHAIN_BALANCE_ISSUE, ApiError.FOREIGN_BLOCKCHAIN_NETWORK_ISSUE})
 	@SecurityRequirement(name = "apiKey")
-	public String sendBitcoin(@HeaderParam(Security.API_KEY_HEADER) String apiKey, DogecoinSendRequest dogecoinSendRequest) {
+	public String sendBitcoin(@HeaderParam(Security.API_KEY_HEADER) String apiKey, BitcoinySendRequest dogecoinSendRequest) {
 		Security.checkApiCallAllowed(request);
 
-		if (dogecoinSendRequest.dogecoinAmount <= 0)
+		if (dogecoinSendRequest.coinAmount <= 0)
 			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_CRITERIA);
 
 		if (dogecoinSendRequest.feePerByte != null && dogecoinSendRequest.feePerByte <= 0)
@@ -230,7 +230,7 @@ public class CrossChainDogecoinResource {
 
 		Transaction spendTransaction = dogecoin.buildSpend(dogecoinSendRequest.xprv58,
 				dogecoinSendRequest.receivingAddress,
-				dogecoinSendRequest.dogecoinAmount,
+				dogecoinSendRequest.coinAmount,
 				dogecoinSendRequest.feePerByte);
 
 		if (spendTransaction == null)
