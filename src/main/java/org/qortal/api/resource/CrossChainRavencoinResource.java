@@ -19,6 +19,7 @@ import org.qortal.crosschain.AddressInfo;
 import org.qortal.crosschain.ForeignBlockchainException;
 import org.qortal.crosschain.Ravencoin;
 import org.qortal.crosschain.SimpleTransaction;
+import org.qortal.crosschain.ServerConfigurationInfo;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.GET;
@@ -189,45 +190,6 @@ public class CrossChainRavencoinResource {
 	}
 
 	@POST
-	@Path("/unusedaddress")
-	@Operation(
-		summary = "Returns first unused address for hierarchical, deterministic BIP32 wallet",
-		description = "Supply BIP32 'm' private/public key in base58, starting with 'xprv'/'xpub' for mainnet, 'tprv'/'tpub' for testnet",
-		requestBody = @RequestBody(
-			required = true,
-			content = @Content(
-				mediaType = MediaType.TEXT_PLAIN,
-				schema = @Schema(
-					type = "string",
-					description = "BIP32 'm' private/public key in base58",
-					example = "tpubD6NzVbkrYhZ4XTPc4btCZ6SMgn8CxmWkj6VBVZ1tfcJfMq4UwAjZbG8U74gGSypL9XBYk2R2BLbDBe8pcEyBKM1edsGQEPKXNbEskZozeZc"
-				)
-			)
-		),
-		responses = {
-			@ApiResponse(
-				content = @Content(array = @ArraySchema( schema = @Schema( implementation = SimpleTransaction.class ) ) )
-			)
-		}
-	)
-	@ApiErrors({ApiError.INVALID_PRIVATE_KEY, ApiError.FOREIGN_BLOCKCHAIN_NETWORK_ISSUE})
-	@SecurityRequirement(name = "apiKey")
-	public String getUnusedRavencoinReceiveAddress(@HeaderParam(Security.API_KEY_HEADER) String apiKey, String key58) {
-		Security.checkApiCallAllowed(request);
-
-		Ravencoin ravencoin = Ravencoin.getInstance();
-
-		if (!ravencoin.isValidDeterministicKey(key58))
-			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_PRIVATE_KEY);
-
-		try {
-			return ravencoin.getUnusedReceiveAddress(key58);
-		} catch (ForeignBlockchainException e) {
-			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.FOREIGN_BLOCKCHAIN_NETWORK_ISSUE);
-		}
-	}
-
-	@POST
 	@Path("/send")
 	@Operation(
 		summary = "Sends RVN from hierarchical, deterministic BIP32 wallet to specific address",
@@ -283,4 +245,137 @@ public class CrossChainRavencoinResource {
 		return spendTransaction.getTxId().toString();
 	}
 
+	@GET
+	@Path("/serverinfos")
+	@Operation(
+			summary = "Returns current Ravencoin server configuration",
+			description = "Returns current Ravencoin server locations and use status",
+			responses = {
+					@ApiResponse(
+							content = @Content(
+									mediaType = MediaType.APPLICATION_JSON,
+									schema = @Schema(
+											implementation = ServerConfigurationInfo.class
+									)
+							)
+					)
+			}
+	)
+	public ServerConfigurationInfo getServerConfiguration() {
+
+		return CrossChainUtils.buildServerConfigurationInfo(Ravencoin.getInstance());
+	}
+
+	@GET
+	@Path("/feekb")
+	@Operation(
+			summary = "Returns Ravencoin fee per Kb.",
+			description = "Returns Ravencoin fee per Kb.",
+			responses = {
+					@ApiResponse(
+							content = @Content(
+									schema = @Schema(
+											type = "number"
+									)
+							)
+					)
+			}
+	)
+	public String getRavencoinFeePerKb() {
+		Ravencoin ravencoin = Ravencoin.getInstance();
+
+		return String.valueOf(ravencoin.getFeePerKb().value);
+	}
+
+	@POST
+	@Path("/updatefeekb")
+	@Operation(
+			summary = "Sets Ravencoin fee per Kb.",
+			description = "Sets Ravencoin fee per Kb.",
+			requestBody = @RequestBody(
+					required = true,
+					content = @Content(
+							mediaType = MediaType.TEXT_PLAIN,
+							schema = @Schema(
+									type = "number",
+									description = "the fee per Kb",
+									example = "100"
+							)
+					)
+			),
+			responses = {
+					@ApiResponse(
+							content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(type = "number", description = "fee"))
+					)
+			}
+	)
+	@ApiErrors({ApiError.INVALID_PRIVATE_KEY, ApiError.INVALID_CRITERIA})
+	public String setRavencoinFeePerKb(@HeaderParam(Security.API_KEY_HEADER) String apiKey, String fee) {
+		Security.checkApiCallAllowed(request);
+
+		Ravencoin ravencoin = Ravencoin.getInstance();
+
+		try {
+			return CrossChainUtils.setFeePerKb(ravencoin, fee);
+		} catch (IllegalArgumentException e) {
+			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_CRITERIA);
+		}
+	}
+
+	@GET
+	@Path("/feeceiling")
+	@Operation(
+			summary = "Returns Ravencoin fee per Kb.",
+			description = "Returns Ravencoin fee per Kb.",
+			responses = {
+					@ApiResponse(
+							content = @Content(
+									schema = @Schema(
+											type = "number"
+									)
+							)
+					)
+			}
+	)
+	public String getRavencoinFeeCeiling() {
+		Ravencoin ravencoin = Ravencoin.getInstance();
+
+		return String.valueOf(ravencoin.getFeeCeiling());
+	}
+
+	@POST
+	@Path("/updatefeeceiling")
+	@Operation(
+			summary = "Sets Ravencoin fee ceiling.",
+			description = "Sets Ravencoin fee ceiling.",
+			requestBody = @RequestBody(
+					required = true,
+					content = @Content(
+							mediaType = MediaType.TEXT_PLAIN,
+							schema = @Schema(
+									type = "number",
+									description = "the fee",
+									example = "100"
+							)
+					)
+			),
+			responses = {
+					@ApiResponse(
+							content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(type = "number", description = "fee"))
+					)
+			}
+	)
+	@ApiErrors({ApiError.INVALID_PRIVATE_KEY, ApiError.INVALID_CRITERIA})
+	public String setRavencoinFeeCeiling(@HeaderParam(Security.API_KEY_HEADER) String apiKey, String fee) {
+		Security.checkApiCallAllowed(request);
+
+		Ravencoin ravencoin = Ravencoin.getInstance();
+
+		try {
+			return CrossChainUtils.setFeeCeiling(ravencoin, fee);
+		}
+		catch (IllegalArgumentException e) {
+			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_CRITERIA);
+		}
+	}
 }

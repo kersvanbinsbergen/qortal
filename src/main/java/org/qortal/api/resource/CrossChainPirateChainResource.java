@@ -16,6 +16,7 @@ import org.qortal.api.model.crosschain.PirateChainSendRequest;
 import org.qortal.crosschain.ForeignBlockchainException;
 import org.qortal.crosschain.PirateChain;
 import org.qortal.crosschain.SimpleTransaction;
+import org.qortal.crosschain.ServerConfigurationInfo;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.GET;
@@ -327,6 +328,140 @@ public class CrossChainPirateChainResource {
 			return pirateChain.getSyncStatus(entropy58);
 		} catch (ForeignBlockchainException e) {
 			throw ApiExceptionFactory.INSTANCE.createCustomException(request, ApiError.FOREIGN_BLOCKCHAIN_NETWORK_ISSUE, e.getMessage());
+		}
+	}
+
+	@GET
+	@Path("/serverinfos")
+	@Operation(
+			summary = "Returns current PirateChain server configuration",
+			description = "Returns current PirateChain server locations and use status",
+			responses = {
+					@ApiResponse(
+							content = @Content(
+									mediaType = MediaType.APPLICATION_JSON,
+									schema = @Schema(
+											implementation = ServerConfigurationInfo.class
+									)
+							)
+					)
+			}
+	)
+	public ServerConfigurationInfo getServerConfiguration() {
+
+		return CrossChainUtils.buildServerConfigurationInfo(PirateChain.getInstance());
+	}
+
+	@GET
+	@Path("/feekb")
+	@Operation(
+			summary = "Returns PirateChain fee per Kb.",
+			description = "Returns PirateChain fee per Kb.",
+			responses = {
+					@ApiResponse(
+							content = @Content(
+									schema = @Schema(
+											type = "number"
+									)
+							)
+					)
+			}
+	)
+	public String getPirateChainFeePerKb() {
+		PirateChain pirateChain = PirateChain.getInstance();
+
+		return String.valueOf(pirateChain.getFeePerKb().value);
+	}
+
+	@POST
+	@Path("/updatefeekb")
+	@Operation(
+			summary = "Sets PirateChain fee per Kb.",
+			description = "Sets PirateChain fee per Kb.",
+			requestBody = @RequestBody(
+					required = true,
+					content = @Content(
+							mediaType = MediaType.TEXT_PLAIN,
+							schema = @Schema(
+									type = "number",
+									description = "the fee per Kb",
+									example = "100"
+							)
+					)
+			),
+			responses = {
+					@ApiResponse(
+							content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(type = "number", description = "fee"))
+					)
+			}
+	)
+	@ApiErrors({ApiError.INVALID_PRIVATE_KEY, ApiError.INVALID_CRITERIA})
+	public String setPirateChainFeePerKb(@HeaderParam(Security.API_KEY_HEADER) String apiKey, String fee) {
+		Security.checkApiCallAllowed(request);
+
+		PirateChain pirateChain = PirateChain.getInstance();
+
+		try {
+			return CrossChainUtils.setFeePerKb(pirateChain, fee);
+		} catch (IllegalArgumentException e) {
+			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_CRITERIA);
+		}
+	}
+
+	@GET
+	@Path("/feeceiling")
+	@Operation(
+			summary = "Returns PirateChain fee per Kb.",
+			description = "Returns PirateChain fee per Kb.",
+			responses = {
+					@ApiResponse(
+							content = @Content(
+									schema = @Schema(
+											type = "number"
+									)
+							)
+					)
+			}
+	)
+	public String getPirateChainFeeCeiling() {
+		PirateChain pirateChain = PirateChain.getInstance();
+
+		return String.valueOf(pirateChain.getFeeCeiling());
+	}
+
+	@POST
+	@Path("/updatefeeceiling")
+	@Operation(
+			summary = "Sets PirateChain fee ceiling.",
+			description = "Sets PirateChain fee ceiling.",
+			requestBody = @RequestBody(
+					required = true,
+					content = @Content(
+							mediaType = MediaType.TEXT_PLAIN,
+							schema = @Schema(
+									type = "number",
+									description = "the fee",
+									example = "100"
+							)
+					)
+			),
+			responses = {
+					@ApiResponse(
+							content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(type = "number", description = "fee"))
+					)
+			}
+	)
+	@ApiErrors({ApiError.INVALID_PRIVATE_KEY, ApiError.INVALID_CRITERIA})
+	public String setPirateChainFeeCeiling(@HeaderParam(Security.API_KEY_HEADER) String apiKey, String fee) {
+		Security.checkApiCallAllowed(request);
+
+		PirateChain pirateChain = PirateChain.getInstance();
+
+		try {
+			return CrossChainUtils.setFeeCeiling(pirateChain, fee);
+		}
+		catch (IllegalArgumentException e) {
+			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_CRITERIA);
 		}
 	}
 }

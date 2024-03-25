@@ -6,7 +6,7 @@ import org.bitcoinj.core.NetworkParameters;
 import org.libdohj.params.DogecoinMainNetParams;
 import org.libdohj.params.DogecoinTestNet3Params;
 import org.qortal.crosschain.ElectrumX.Server;
-import org.qortal.crosschain.ElectrumX.Server.ConnectionType;
+import org.qortal.crosschain.ChainableServer.ConnectionType;
 import org.qortal.settings.Settings;
 
 import java.util.Arrays;
@@ -45,11 +45,8 @@ public class Dogecoin extends Bitcoiny {
 				return Arrays.asList(
 					// Servers chosen on NO BASIS WHATSOEVER from various sources!
 					// Status verified at https://1209k.com/bitcoin-eye/ele.php?chain=doge
+					new Server("dogecoin.stackwallet.com", Server.ConnectionType.SSL, 50022),
 					new Server("electrum.qortal.link", Server.ConnectionType.SSL, 54002),
-					new Server("electrum1-doge.qortal.online", Server.ConnectionType.SSL, 50002),
-					new Server("electrum2-doge.qortal.online", Server.ConnectionType.SSL, 50002),
-					new Server("electrum3-doge.qortal.online", Server.ConnectionType.SSL, 30002),
-					new Server("electrum4-doge.qortal.online", Server.ConnectionType.SSL, 30002),
 					new Server("electrum1.cipig.net", Server.ConnectionType.SSL, 20060),
 					new Server("electrum2.cipig.net", Server.ConnectionType.SSL, 20060),
 					new Server("electrum3.cipig.net", Server.ConnectionType.SSL, 20060)
@@ -63,8 +60,7 @@ public class Dogecoin extends Bitcoiny {
 
 			@Override
 			public long getP2shFee(Long timestamp) {
-				// TODO: This will need to be replaced with something better in the near future!
-				return MAINNET_FEE;
+				return this.getFeeCeiling();
 			}
 		},
 		TEST3 {
@@ -114,6 +110,16 @@ public class Dogecoin extends Bitcoiny {
 			}
 		};
 
+		private long feeCeiling = MAINNET_FEE;
+
+		public long getFeeCeiling() {
+			return feeCeiling;
+		}
+
+		public void setFeeCeiling(long feeCeiling) {
+			this.feeCeiling = feeCeiling;
+		}
+
 		public abstract NetworkParameters getParams();
 		public abstract Collection<Server> getServers();
 		public abstract String getGenesisHash();
@@ -127,7 +133,7 @@ public class Dogecoin extends Bitcoiny {
 	// Constructors and instance
 
 	private Dogecoin(DogecoinNet dogecoinNet, BitcoinyBlockchainProvider blockchain, Context bitcoinjContext, String currencyCode) {
-		super(blockchain, bitcoinjContext, currencyCode);
+		super(blockchain, bitcoinjContext, currencyCode, DEFAULT_FEE_PER_KB);
 		this.dogecoinNet = dogecoinNet;
 
 		LOGGER.info(() -> String.format("Starting Dogecoin support using %s", this.dogecoinNet.name()));
@@ -157,11 +163,6 @@ public class Dogecoin extends Bitcoiny {
 	// Actual useful methods for use by other classes
 
 	@Override
-	public Coin getFeePerKb() {
-		return DEFAULT_FEE_PER_KB;
-	}
-
-	@Override
 	public long getMinimumOrderAmount() {
 		return MINIMUM_ORDER_AMOUNT;
 	}
@@ -177,4 +178,14 @@ public class Dogecoin extends Bitcoiny {
 		return this.dogecoinNet.getP2shFee(timestamp);
 	}
 
+	@Override
+	public long getFeeCeiling() {
+		return this.dogecoinNet.getFeeCeiling();
+	}
+
+	@Override
+	public void setFeeCeiling(long fee) {
+
+		this.dogecoinNet.setFeeCeiling( fee );
+	}
 }

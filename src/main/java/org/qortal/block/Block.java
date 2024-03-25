@@ -1061,8 +1061,10 @@ public class Block {
 			return ValidationResult.MINTER_NOT_ACCEPTED;
 
 		long expectedTimestamp = calcTimestamp(parentBlockData, this.blockData.getMinterPublicKey(), minterLevel);
-		if (this.blockData.getTimestamp() != expectedTimestamp)
+		if (this.blockData.getTimestamp() != expectedTimestamp) {
+			LOGGER.debug(String.format("timestamp mismatch! block had %s but we expected %s", this.blockData.getTimestamp(), expectedTimestamp));
 			return ValidationResult.TIMESTAMP_INCORRECT;
+		}
 
 		return ValidationResult.OK;
 	}
@@ -1309,6 +1311,9 @@ public class Block {
 					if (!transaction.isConfirmable()) {
 						return ValidationResult.TRANSACTION_NOT_CONFIRMABLE;
 					}
+					if (!transaction.isConfirmableAtHeight(this.blockData.getHeight())) {
+						return ValidationResult.TRANSACTION_NOT_CONFIRMABLE;
+					}
 				}
 
 				// Check transaction isn't already included in a block
@@ -1545,12 +1550,22 @@ public class Block {
 				processBlockRewards();
 			}
 
-			if (this.blockData.getHeight() == 212937)
+			if (this.blockData.getHeight() == 212937) {
 				// Apply fix for block 212937
 				Block212937.processFix(this);
+			}
 
-			else if (this.blockData.getHeight() == BlockChain.getInstance().getSelfSponsorshipAlgoV1Height())
+			if (this.blockData.getHeight() == BlockChain.getInstance().getSelfSponsorshipAlgoV1Height()) {
 				SelfSponsorshipAlgoV1Block.processAccountPenalties(this);
+			}
+
+			if (this.blockData.getHeight() == BlockChain.getInstance().getSelfSponsorshipAlgoV2Height()) {
+				SelfSponsorshipAlgoV2Block.processAccountPenalties(this);
+			}
+
+			if (this.blockData.getHeight() == BlockChain.getInstance().getSelfSponsorshipAlgoV3Height()) {
+				SelfSponsorshipAlgoV3Block.processAccountPenalties(this);
+			}
 		}
 
 		// We're about to (test-)process a batch of transactions,
@@ -1835,13 +1850,23 @@ public class Block {
 			// Invalidate expandedAccounts as they may have changed due to orphaning TRANSFER_PRIVS transactions, etc.
 			this.cachedExpandedAccounts = null;
 
-			if (this.blockData.getHeight() == 212937)
+			if (this.blockData.getHeight() == 212937) {
 				// Revert fix for block 212937
 				Block212937.orphanFix(this);
+			}
 
-			else if (this.blockData.getHeight() == BlockChain.getInstance().getSelfSponsorshipAlgoV1Height())
+			if (this.blockData.getHeight() == BlockChain.getInstance().getSelfSponsorshipAlgoV1Height()) {
 				SelfSponsorshipAlgoV1Block.orphanAccountPenalties(this);
+			}
 
+			if (this.blockData.getHeight() == BlockChain.getInstance().getSelfSponsorshipAlgoV2Height()) {
+				SelfSponsorshipAlgoV2Block.orphanAccountPenalties(this);
+			}
+
+			if (this.blockData.getHeight() == BlockChain.getInstance().getSelfSponsorshipAlgoV3Height()) {
+				SelfSponsorshipAlgoV3Block.orphanAccountPenalties(this);
+			}
+			
 			// Account levels and block rewards are only processed/orphaned on block reward distribution blocks
 			if (this.isRewardDistributionBlock()) {
 				// Block rewards, including transaction fees, removed after transactions undone
@@ -2088,7 +2113,7 @@ public class Block {
 		return Block.isOnlineAccountsBlock(this.getBlockData().getHeight());
 	}
 
-	private static boolean isOnlineAccountsBlock(int height) {
+	public static boolean isOnlineAccountsBlock(int height) {
 		// After feature trigger, only certain blocks contain online accounts
 		if (height >= BlockChain.getInstance().getBlockRewardBatchStartHeight()) {
 			final int leadingBlockCount = BlockChain.getInstance().getBlockRewardBatchAccountsBlockCount();
@@ -2539,5 +2564,4 @@ public class Block {
 			LOGGER.info(() -> String.format("Unable to log block debugging info: %s", e.getMessage()));
 		}
 	}
-
 }

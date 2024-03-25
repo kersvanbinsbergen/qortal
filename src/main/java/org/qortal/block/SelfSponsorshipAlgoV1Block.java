@@ -28,7 +28,6 @@ public final class SelfSponsorshipAlgoV1Block {
 
 	private static final Logger LOGGER = LogManager.getLogger(SelfSponsorshipAlgoV1Block.class);
 
-
 	private SelfSponsorshipAlgoV1Block() {
 		/* Do not instantiate */
 	}

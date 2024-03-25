@@ -173,6 +173,7 @@ public abstract class Transaction {
 		INVALID_OPTION_LENGTH(20),
 		DUPLICATE_OPTION(21),
 		POLL_ALREADY_EXISTS(22),
+		POLL_ALREADY_HAS_VOTES(23),
 		POLL_DOES_NOT_EXIST(24),
 		POLL_OPTION_DOES_NOT_EXIST(25),
 		ALREADY_VOTED_FOR_THAT_OPTION(26),
@@ -246,6 +247,8 @@ public abstract class Transaction {
 		NAME_BLOCKED(97),
 		GROUP_APPROVAL_REQUIRED(98),
 		ACCOUNT_NOT_TRANSFERABLE(99),
+		TRANSFER_PRIVS_DISABLED(100),
+		TEMPORARY_DISABLED(101),
 		INVALID_BUT_OK(999),
 		NOT_YET_RELEASED(1000),
 		NOT_SUPPORTED(1001);
@@ -900,6 +903,15 @@ public abstract class Transaction {
 	 * @return
 	 */
 	public boolean isConfirmable() {
+		/* To be optionally overridden */
+		return true;
+	}
+
+	/**
+	 * Returns whether transaction is confirmable in a block at a given height.
+	 * @return
+	 */
+	public boolean isConfirmableAtHeight(int height) {
 		/* To be optionally overridden */
 		return true;
 	}

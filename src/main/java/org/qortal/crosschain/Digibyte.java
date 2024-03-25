@@ -7,7 +7,7 @@ import org.bitcoinj.params.RegTestParams;
 import org.bitcoinj.params.TestNet3Params;
 import org.libdohj.params.DigibyteMainNetParams;
 import org.qortal.crosschain.ElectrumX.Server;
-import org.qortal.crosschain.ElectrumX.Server.ConnectionType;
+import org.qortal.crosschain.ChainableServer.ConnectionType;
 import org.qortal.settings.Settings;
 
 import java.util.Arrays;
@@ -46,10 +46,6 @@ public class Digibyte extends Bitcoiny {
 					// Servers chosen on NO BASIS WHATSOEVER from various sources!
 					// Status verified at https://1209k.com/bitcoin-eye/ele.php?chain=dgb
 					new Server("electrum.qortal.link", Server.ConnectionType.SSL, 55002),
-					new Server("electrum1-dgb.qortal.online", Server.ConnectionType.SSL, 50002),
-					new Server("electrum2-dgb.qortal.online", Server.ConnectionType.SSL, 50002),
-					new Server("electrum3-dgb.qortal.online", Server.ConnectionType.SSL, 40002),
-					new Server("electrum4-dgb.qortal.online", Server.ConnectionType.SSL, 40002),
 					new Server("electrum1.cipig.net", Server.ConnectionType.SSL, 20059),
 					new Server("electrum2.cipig.net", Server.ConnectionType.SSL, 20059),
 					new Server("electrum3.cipig.net", Server.ConnectionType.SSL, 20059)
@@ -63,8 +59,7 @@ public class Digibyte extends Bitcoiny {
 
 			@Override
 			public long getP2shFee(Long timestamp) {
-				// TODO: This will need to be replaced with something better in the near future!
-				return MAINNET_FEE;
+				return this.getFeeCeiling();
 			}
 		},
 		TEST3 {
@@ -114,6 +109,16 @@ public class Digibyte extends Bitcoiny {
 			}
 		};
 
+		private long feeCeiling = MAINNET_FEE;
+
+		public long getFeeCeiling() {
+			return feeCeiling;
+		}
+
+		public void setFeeCeiling(long feeCeiling) {
+			this.feeCeiling = feeCeiling;
+		}
+
 		public abstract NetworkParameters getParams();
 		public abstract Collection<Server> getServers();
 		public abstract String getGenesisHash();
@@ -127,7 +132,7 @@ public class Digibyte extends Bitcoiny {
 	// Constructors and instance
 
 	private Digibyte(DigibyteNet digibyteNet, BitcoinyBlockchainProvider blockchain, Context bitcoinjContext, String currencyCode) {
-		super(blockchain, bitcoinjContext, currencyCode);
+		super(blockchain, bitcoinjContext, currencyCode, DEFAULT_FEE_PER_KB);
 		this.digibyteNet = digibyteNet;
 
 		LOGGER.info(() -> String.format("Starting Digibyte support using %s", this.digibyteNet.name()));
@@ -157,11 +162,6 @@ public class Digibyte extends Bitcoiny {
 	// Actual useful methods for use by other classes
 
 	@Override
-	public Coin getFeePerKb() {
-		return DEFAULT_FEE_PER_KB;
-	}
-
-	@Override
 	public long getMinimumOrderAmount() {
 		return MINIMUM_ORDER_AMOUNT;
 	}
@@ -177,4 +177,14 @@ public class Digibyte extends Bitcoiny {
 		return this.digibyteNet.getP2shFee(timestamp);
 	}
 
+	@Override
+	public long getFeeCeiling() {
+		return this.digibyteNet.getFeeCeiling();
+	}
+
+	@Override
+	public void setFeeCeiling(long fee) {
+
+		this.digibyteNet.setFeeCeiling( fee );
+	}
 }

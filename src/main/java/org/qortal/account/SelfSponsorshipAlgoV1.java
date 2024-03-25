@@ -363,5 +363,4 @@ public class SelfSponsorshipAlgoV1 {
 
         return transactionDataList;
     }
-
 }

@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.Transaction;
 import org.qortal.api.ApiError;
 import org.qortal.api.ApiErrors;
@@ -19,6 +20,7 @@ import org.qortal.crosschain.AddressInfo;
 import org.qortal.crosschain.Bitcoin;
 import org.qortal.crosschain.ForeignBlockchainException;
 import org.qortal.crosschain.SimpleTransaction;
+import org.qortal.crosschain.ServerConfigurationInfo;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.GET;
@@ -189,45 +191,6 @@ public class CrossChainBitcoinResource {
 	}
 
 	@POST
-	@Path("/unusedaddress")
-	@Operation(
-		summary = "Returns first unused address for hierarchical, deterministic BIP32 wallet",
-		description = "Supply BIP32 'm' private/public key in base58, starting with 'xprv'/'xpub' for mainnet, 'tprv'/'tpub' for testnet",
-		requestBody = @RequestBody(
-			required = true,
-			content = @Content(
-				mediaType = MediaType.TEXT_PLAIN,
-				schema = @Schema(
-					type = "string",
-					description = "BIP32 'm' private/public key in base58",
-					example = "tpubD6NzVbkrYhZ4XTPc4btCZ6SMgn8CxmWkj6VBVZ1tfcJfMq4UwAjZbG8U74gGSypL9XBYk2R2BLbDBe8pcEyBKM1edsGQEPKXNbEskZozeZc"
-				)
-			)
-		),
-		responses = {
-			@ApiResponse(
-				content = @Content(array = @ArraySchema( schema = @Schema( implementation = SimpleTransaction.class ) ) )
-			)
-		}
-	)
-	@ApiErrors({ApiError.INVALID_PRIVATE_KEY, ApiError.FOREIGN_BLOCKCHAIN_NETWORK_ISSUE})
-	@SecurityRequirement(name = "apiKey")
-	public String getUnusedBitcoinReceiveAddress(@HeaderParam(Security.API_KEY_HEADER) String apiKey, String key58) {
-		Security.checkApiCallAllowed(request);
-
-		Bitcoin bitcoin = Bitcoin.getInstance();
-
-		if (!bitcoin.isValidDeterministicKey(key58))
-			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_PRIVATE_KEY);
-
-		try {
-			return bitcoin.getUnusedReceiveAddress(key58);
-		} catch (ForeignBlockchainException e) {
-			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.FOREIGN_BLOCKCHAIN_NETWORK_ISSUE);
-		}
-	}
-
-	@POST
 	@Path("/send")
 	@Operation(
 		summary = "Sends BTC from hierarchical, deterministic BIP32 wallet to specific address",
@@ -283,4 +246,137 @@ public class CrossChainBitcoinResource {
 		return spendTransaction.getTxId().toString();
 	}
 
+	@GET
+	@Path("/serverinfos")
+	@Operation(
+			summary = "Returns current Bitcoin server configuration",
+			description = "Returns current Bitcoin server locations and use status",
+			responses = {
+					@ApiResponse(
+							content = @Content(
+									mediaType = MediaType.APPLICATION_JSON,
+									schema = @Schema(
+											implementation = ServerConfigurationInfo.class
+									)
+							)
+					)
+			}
+	)
+	public ServerConfigurationInfo getServerConfiguration() {
+
+		return CrossChainUtils.buildServerConfigurationInfo(Bitcoin.getInstance());
+	}
+
+	@GET
+	@Path("/feekb")
+	@Operation(
+			summary = "Returns Bitcoin fee per Kb.",
+			description = "Returns Bitcoin fee per Kb.",
+			responses = {
+					@ApiResponse(
+							content = @Content(
+									schema = @Schema(
+											type = "number"
+									)
+							)
+					)
+			}
+	)
+	public String getBitcoinFeePerKb() {
+		Bitcoin bitcoin = Bitcoin.getInstance();
+
+		return String.valueOf(bitcoin.getFeePerKb().value);
+	}
+
+	@POST
+	@Path("/updatefeekb")
+	@Operation(
+			summary = "Sets Bitcoin fee per Kb.",
+			description = "Sets Bitcoin fee per Kb.",
+			requestBody = @RequestBody(
+					required = true,
+					content = @Content(
+							mediaType = MediaType.TEXT_PLAIN,
+							schema = @Schema(
+									type = "number",
+									description = "the fee per Kb",
+									example = "100"
+							)
+					)
+			),
+			responses = {
+					@ApiResponse(
+							content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(type = "number", description = "fee"))
+					)
+			}
+	)
+	@ApiErrors({ApiError.INVALID_PRIVATE_KEY, ApiError.INVALID_CRITERIA})
+	public String setBitcoinFeePerKb(@HeaderParam(Security.API_KEY_HEADER) String apiKey, String fee) {
+		Security.checkApiCallAllowed(request);
+
+		Bitcoin bitcoin = Bitcoin.getInstance();
+
+		try {
+			return CrossChainUtils.setFeePerKb(bitcoin, fee);
+		} catch (IllegalArgumentException e) {
+			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_CRITERIA);
+		}
+	}
+
+	@GET
+	@Path("/feeceiling")
+	@Operation(
+			summary = "Returns Bitcoin fee per Kb.",
+			description = "Returns Bitcoin fee per Kb.",
+			responses = {
+					@ApiResponse(
+							content = @Content(
+									schema = @Schema(
+											type = "number"
+									)
+							)
+					)
+			}
+	)
+	public String getBitcoinFeeCeiling() {
+		Bitcoin bitcoin = Bitcoin.getInstance();
+
+		return String.valueOf(bitcoin.getFeeCeiling());
+	}
+
+	@POST
+	@Path("/updatefeeceiling")
+	@Operation(
+			summary = "Sets Bitcoin fee ceiling.",
+			description = "Sets Bitcoin fee ceiling.",
+			requestBody = @RequestBody(
+					required = true,
+					content = @Content(
+							mediaType = MediaType.TEXT_PLAIN,
+							schema = @Schema(
+									type = "number",
+									description = "the fee",
+									example = "100"
+							)
+					)
+			),
+			responses = {
+					@ApiResponse(
+							content = @Content(mediaType = MediaType.TEXT_PLAIN, schema = @Schema(type = "number", description = "fee"))
+					)
+			}
+	)
+	@ApiErrors({ApiError.INVALID_PRIVATE_KEY, ApiError.INVALID_CRITERIA})
+	public String setBitcoinFeeCeiling(@HeaderParam(Security.API_KEY_HEADER) String apiKey, String fee) {
+		Security.checkApiCallAllowed(request);
+
+		Bitcoin bitcoin = Bitcoin.getInstance();
+
+		try {
+			return CrossChainUtils.setFeeCeiling(bitcoin, fee);
+		}
+		catch (IllegalArgumentException e) {
+			throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.INVALID_CRITERIA);
+		}
+	}
 }
