@@ -203,7 +203,7 @@ public class AddressesResource {
 			List<OnlineAccountLevel> onlineAccountLevels = new ArrayList<>();
 
 			// Prepopulate all levels
-			for (int i=0; i<=10; i++)
+			for (int i=0; i<=11; i++)
 				onlineAccountLevels.add(new OnlineAccountLevel(i, 0));
 
 			for (OnlineAccountData onlineAccountData : onlineAccounts) {
