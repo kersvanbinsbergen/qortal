@@ -172,9 +172,10 @@ public class AddressesResource {
 				if (rewardShareData == null)
 					// This shouldn't happen?
 					throw ApiExceptionFactory.INSTANCE.createException(request, ApiError.PUBLIC_KEY_NOT_FOUND);
+				final int minterLevel = Account.getRewardShareEffectiveMintingLevelIncludingLevelZero(repository, onlineAccountData.getPublicKey());
 
 				apiOnlineAccounts.add(new ApiOnlineAccount(onlineAccountData.getTimestamp(), onlineAccountData.getSignature(), onlineAccountData.getPublicKey(),
-						rewardShareData.getMintingAccount(), rewardShareData.getRecipient()));
+						rewardShareData.getMintingAccount(), rewardShareData.getRecipient(), minterLevel));
 			}
 
 			return apiOnlineAccounts;
