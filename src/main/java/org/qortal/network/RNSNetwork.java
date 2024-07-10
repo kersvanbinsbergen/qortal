@@ -39,6 +39,8 @@ import org.qortal.settings.Settings;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.StandardCopyOption;
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.WRITE;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -116,6 +118,13 @@ public class RNSNetwork {
             serverIdentity = new Identity();
             log.info("APP_NAME: {}, storage path: {}", APP_NAME, serverIdentityPath);
             log.info("new server identity created dynamically.");
+            // save it back to file by default for next start (possibly add setting to override)
+            try {
+                Files.write(serverIdentityPath, serverIdentity.getPrivateKey(), CREATE, WRITE);
+                log.info("serverIdentity written back to file");
+            } catch (IOException e) {
+                log.error("Error while saving serverIdentity to {}", serverIdentityPath, e);
+            }
         }
         log.debug("Server Identity: {}", serverIdentity.toString());
 
