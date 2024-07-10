@@ -191,12 +191,9 @@ public class RNSPeer {
     }
 
     public void packetTimedOut(PacketReceipt receipt) {
-        log.info("packet timed out");
+        log.info("packet timed out, receipt status: {}", receipt.getStatus());
         if (receipt.getStatus() == PacketReceiptStatus.FAILED) {
-            log.info("packet timed out, receipt status: {}", PacketReceiptStatus.FAILED);
             this.peerTimedOut = true;
-            peerLink.teardown();
-            //this.deleteMe = true;
         }
     }
 

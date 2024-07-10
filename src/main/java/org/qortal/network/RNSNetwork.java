@@ -236,10 +236,7 @@ public class RNSNetwork {
     }
 
     public void packetTimedOut(PacketReceipt receipt) {
-        log.info("packet timed out");
-        if (receipt.getStatus() == PacketReceiptStatus.FAILED) {
-            log.info("packet timed out, receipt status: {}", PacketReceiptStatus.FAILED);
-        }
+        log.info("packet timed out, receipt status: {}", receipt.getStatus());
     }
 
     public void clientConnected(Link link) {
