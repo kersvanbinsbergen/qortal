@@ -237,7 +237,7 @@ public class RNSPeer {
                 link.setPacketCallback(this::linkPacketReceived);
                 Packet pingPacket = new Packet(link, data);
                 PacketReceipt packetReceipt = pingPacket.send();
-                //packetReceipt.setTimeout(3L);
+                packetReceipt.setTimeout(3L);
                 packetReceipt.setTimeoutCallback(this::packetTimedOut);
                 packetReceipt.setDeliveryCallback(this::packetDelivered);
             } else {
