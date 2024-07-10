@@ -484,7 +484,6 @@ public class RNSNetwork {
             log.info("prunePeers - pLink: {}, destinationHash: {}",
                 pLink, Hex.encodeHexString(p.getDestinationHash()));
             log.debug("peer: {}", p);
-            p.pingRemote();
             if (nonNull(pLink)) {
                 if (p.getPeerTimedOut()) {
                     // close peer link for now
