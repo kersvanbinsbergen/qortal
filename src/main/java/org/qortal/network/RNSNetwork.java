@@ -167,7 +167,20 @@ public class RNSNetwork {
         //rnsNetworkEPC.start();
     }
 
-    //@Synchronized
+    private void initConfig(String configDir) throws IOException {
+        File configDir1 = new File(defaultConfigPath);
+        if (!configDir1.exists()) {
+            configDir1.mkdir();
+        }
+        var configPath = Path.of(configDir1.getAbsolutePath());
+        Path configFile = configPath.resolve(CONFIG_FILE_NAME);
+
+        if (Files.notExists(configFile)) {
+            var defaultConfig = this.getClass().getClassLoader().getResourceAsStream("reticulum_default_config.yml");
+            Files.copy(defaultConfig, configFile, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
     public void shutdown() {
         isShuttingDown = true;
         log.info("shutting down Reticulum");
@@ -194,28 +207,21 @@ public class RNSNetwork {
         }
         // gracefully close links of peers that point to us
         for (Link l: incomingLinks) {
-            var data = concatArrays("close::".getBytes(UTF_8),l.getDestination().getHash());
-            Packet closePacket = new Packet(l, data);
-            var packetReceipt = closePacket.send();
-            packetReceipt.setTimeout(3L);
-            packetReceipt.setDeliveryCallback(this::closePacketDelivered);
-            packetReceipt.setTimeoutCallback(this::packetTimedOut);
+            sendCloseToRemote(l);
         }
         // Note: we still need to get the packet timeout callback to work...
         reticulum.exitHandler();
     }
 
-    private void initConfig(String configDir) throws IOException {
-        File configDir1 = new File(defaultConfigPath);
-        if (!configDir1.exists()) {
-            configDir1.mkdir();
-        }
-        var configPath = Path.of(configDir1.getAbsolutePath());
-        Path configFile = configPath.resolve(CONFIG_FILE_NAME);
-
-        if (Files.notExists(configFile)) {
-            var defaultConfig = this.getClass().getClassLoader().getResourceAsStream("reticulum_default_config.yml");
-            Files.copy(defaultConfig, configFile, StandardCopyOption.REPLACE_EXISTING);
+    public void sendCloseToRemote(Link link) {
+        if (nonNull(link)) {
+            var data = concatArrays("close::".getBytes(UTF_8),link.getDestination().getHash());
+            Packet closePacket = new Packet(link, data);
+            var packetReceipt = closePacket.send();
+            packetReceipt.setDeliveryCallback(this::closePacketDelivered);
+            packetReceipt.setTimeoutCallback(this::packetTimedOut);
+        } else {
+            log.debug("can't send to null link");
         }
     }
 
@@ -507,7 +513,22 @@ public class RNSNetwork {
         }
         //removeExpiredPeers(this.linkedPeers);
         log.info("number of links (linkedPeers) after prunig: {}", peerList.size());
-        log.info("we have {} non-initiator links, list: {}", incomingLinks.size(), incomingLinks);
+        //log.info("we have {} non-initiator links, list: {}", incomingLinks.size(), incomingLinks);
+        var activePeerCount = 0;
+        var lps =  RNSNetwork.getInstance().getLinkedPeers();
+        for (RNSPeer p: lps) {
+            pLink = p.getPeerLink();
+            p.pingRemote();
+            try {
+                TimeUnit.SECONDS.sleep(2); // allow for peers to disconnect gracefully
+            } catch (InterruptedException e) {
+                log.error("exception: {}", e);
+            }
+            if ((nonNull(pLink) && (pLink.getStatus() == ACTIVE))) {
+                activePeerCount = activePeerCount + 1;
+            }
+        }
+        log.info("we have {} active peers", activePeerCount);
         maybeAnnounce(getBaseDestination());
     }
 

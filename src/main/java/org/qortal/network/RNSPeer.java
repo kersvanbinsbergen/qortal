@@ -194,6 +194,7 @@ public class RNSPeer {
         log.info("packet timed out, receipt status: {}", receipt.getStatus());
         if (receipt.getStatus() == PacketReceiptStatus.FAILED) {
             this.peerTimedOut = true;
+            this.peerLink.teardown();
         }
     }
 
@@ -234,7 +235,7 @@ public class RNSPeer {
                 link.setPacketCallback(this::linkPacketReceived);
                 Packet pingPacket = new Packet(link, data);
                 PacketReceipt packetReceipt = pingPacket.send();
-                packetReceipt.setTimeout(3L);
+                // Note: don't setTimeout, we want it to timeout with FAIL if not deliverable
                 packetReceipt.setTimeoutCallback(this::packetTimedOut);
                 packetReceipt.setDeliveryCallback(this::packetDelivered);
             } else {
