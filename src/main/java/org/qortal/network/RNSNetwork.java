@@ -27,7 +27,6 @@ import static io.reticulum.identity.IdentityKnownDestination.recall;
 import static io.reticulum.utils.IdentityUtils.concatArrays;
 //import static io.reticulum.constant.ReticulumConstant.TRUNCATED_HASHLENGTH;
 import static io.reticulum.constant.ReticulumConstant.CONFIG_FILE_NAME;
-import lombok.extern.slf4j.Slf4j;
 import lombok.Data;
 //import lombok.Setter;
 //import lombok.Getter;
@@ -61,6 +60,11 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.codec.binary.Hex;
 
+// logging
+import lombok.extern.slf4j.Slf4j;
+//import org.slf4j.Logger;
+//import org.slf4j.LoggerFactory;
+
 @Data
 @Slf4j
 public class RNSNetwork {
@@ -68,8 +72,8 @@ public class RNSNetwork {
     Reticulum reticulum;
     //private static final String APP_NAME = "qortal";
     static final String APP_NAME = RNSCommon.APP_NAME;
-    //static final String defaultConfigPath = new String(".reticulum"); // if empty will look in Reticulums default paths
-    static final String defaultConfigPath = RNSCommon.defaultRNSConfigPath;
+    static final String defaultConfigPath = new String(".reticulum"); // if empty will look in Reticulums default paths
+    //static final String defaultConfigPath = RNSCommon.defaultRNSConfigPath;
     //private final String defaultConfigPath = Settings.getInstance().getDefaultRNSConfigPathForReticulum();
     private static Integer MAX_PEERS = 12;
     //private final Integer MAX_PEERS = Settings.getInstance().getMaxReticulumPeers();
@@ -86,16 +90,23 @@ public class RNSNetwork {
     //private volatile boolean isShuttingDown = false;
     //private int totalThreadCount = 0;
     //// TODO: settings - MaxReticulumPeers, MaxRNSNetworkThreadPoolSize (if needed)
+
+    //private static final Logger logger = LoggerFactory.getLogger(RNSNetwork.class);
     
     // Constructor
     private RNSNetwork () {
+        log.info("RNSNetwork constructor");
         try {
+            //String configPath = new java.io.File(defaultConfigPath).getCanonicalPath();
+            log.info("creating config from {}", defaultConfigPath);
             initConfig(defaultConfigPath);
+            //reticulum = new Reticulum(configPath);
             reticulum = new Reticulum(defaultConfigPath);
-            log.info("reticulum instance created: {}", reticulum.toString());
         } catch (IOException e) {
             log.error("unable to create Reticulum network", e);
         }
+        log.info("reticulum instance created");
+        log.info("reticulum instance created: {}", reticulum);
 
         //        Settings.getInstance().getMaxRNSNetworkThreadPoolSize(),   // statically set to 5 below
         //ExecutorService RNSNetworkExecutor = new ThreadPoolExecutor(1,
