@@ -34,7 +34,7 @@ fi
 # Comment out for bigger systems, e.g. non-routers
 # or when API documentation is enabled
 # Uncomment (remove '#' sign) line below if your system has less than 12GB of RAM for optimal RAM defaults
-JVM_MEMORY_ARGS="-Xss256m -XX:+UseSerialGC"
+#JVM_MEMORY_ARGS="-Xss256m -XX:+UseSerialGC"
 
 # Although java.net.preferIPv4Stack is supposed to be false
 # by default in Java 11, on some platforms (e.g. FreeBSD 12),
@@ -43,6 +43,9 @@ JVM_MEMORY_ARGS="-Xss256m -XX:+UseSerialGC"
 nohup nice -n 20 java \
 	-Djava.net.preferIPv4Stack=false \
 	${JVM_MEMORY_ARGS} \
+	--add-opens=java.base/java.lang=ALL-UNNAMED \
+	--add-opens=java.base/java.net=ALL-UNNAMED \
+	--illegal-access=warn \
 	-jar qortal.jar \
 	1>run.log 2>&1 &
 
