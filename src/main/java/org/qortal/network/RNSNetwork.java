@@ -102,6 +102,10 @@ public class RNSNetwork {
             initConfig(defaultConfigPath);
             //reticulum = new Reticulum(configPath);
             reticulum = new Reticulum(defaultConfigPath);
+            var identitiesPath = reticulum.getStoragePath().resolve("identities");
+            if (Files.notExists(identitiesPath)) {
+                Files.createDirectories(identitiesPath);
+            }
         } catch (IOException e) {
             log.error("unable to create Reticulum network", e);
         }
