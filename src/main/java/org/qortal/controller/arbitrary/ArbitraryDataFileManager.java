@@ -43,7 +43,7 @@ public class ArbitraryDataFileManager extends Thread {
     /**
      * Map to keep track of hashes that we might need to relay
      */
-    public List<ArbitraryRelayInfo> arbitraryRelayMap = Collections.synchronizedList(new ArrayList<>());
+    public final List<ArbitraryRelayInfo> arbitraryRelayMap = Collections.synchronizedList(new ArrayList<>());
 
     /**
      * List to keep track of any arbitrary data file hash responses
@@ -53,7 +53,7 @@ public class ArbitraryDataFileManager extends Thread {
     /**
      * List to keep track of peers potentially available for direct connections, based on recent requests
      */
-    private List<ArbitraryDirectConnectionInfo> directConnectionInfo = Collections.synchronizedList(new ArrayList<>());
+    private final List<ArbitraryDirectConnectionInfo> directConnectionInfo = Collections.synchronizedList(new ArrayList<>());
 
     /**
      * Map to keep track of peers requesting QDN data that we hold.
@@ -242,12 +242,13 @@ public class ArbitraryDataFileManager extends Thread {
         boolean isRelayRequest = (requestingPeer != null);
         if (isRelayRequest) {
             if (!fileAlreadyExists) {
-                // File didn't exist locally before the request, and it's a forwarding request, so delete it
-                LOGGER.debug("Deleting file {} because it was needed for forwarding only", Base58.encode(hash));
-
-                // Keep trying to delete the data until it is deleted, or we reach 10 attempts
+                // File didn't exist locally before the request, and it's a forwarding request, so delete it if it exists.
+                // It shouldn't exist on the filesystem yet, but leaving this here just in case.
                 arbitraryDataFile.delete(10);
             }
+        }
+        else {
+            arbitraryDataFile.save();
         }
 
         // If this is a metadata file then we need to update the cache

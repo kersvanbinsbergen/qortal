@@ -58,6 +58,9 @@ public class ArbitraryDataFile {
     public static int SHORT_DIGEST_LENGTH = 8;
 
     protected Path filePath;
+    protected byte[] fileContent;
+    private boolean useTemporaryFile;
+
     protected String hash58;
     protected byte[] signature;
     private ArrayList<ArbitraryDataFileChunk> chunks;
@@ -90,8 +93,14 @@ public class ArbitraryDataFile {
         this.signature = signature;
         LOGGER.trace(String.format("File digest: %s, size: %d bytes", this.hash58, fileContent.length));
 
+        this.fileContent = fileContent;
+        this.useTemporaryFile = useTemporaryFile;
+    }
+
+    public void save() throws DataException {
+
         Path outputFilePath;
-        if (useTemporaryFile) {
+        if (this.useTemporaryFile) {
             try {
                 outputFilePath = Files.createTempFile("qortalRawData", null);
                 outputFilePath.toFile().deleteOnExit();
@@ -149,6 +158,7 @@ public class ArbitraryDataFile {
 
             case RAW_DATA:
                 arbitraryDataFile = ArbitraryDataFile.fromRawData(data, signature);
+                arbitraryDataFile.save();
                 break;
         }
 
@@ -324,6 +334,7 @@ public class ArbitraryDataFile {
                             out.flush();
 
                             ArbitraryDataFileChunk chunk = new ArbitraryDataFileChunk(out.toByteArray(), this.signature);
+                            chunk.save();
                             ValidationResult validationResult = chunk.isValid();
                             if (validationResult == ValidationResult.OK) {
                                 this.chunks.add(chunk);
@@ -343,7 +354,7 @@ public class ArbitraryDataFile {
 
     public boolean join() {
         // Ensure we have chunks
-        if (this.chunks != null && this.chunks.size() > 0) {
+        if (this.chunks != null && !this.chunks.isEmpty()) {
 
             // Create temporary path for joined file
             // Use the user-specified temp dir, as it is deterministic, and is more likely to be located on reusable storage hardware
@@ -406,6 +417,10 @@ public class ArbitraryDataFile {
     }
 
     public boolean delete(int attempts) {
+        if (this.filePath == null) {
+            return false;
+        }
+
         // Keep trying to delete the data until it is deleted, or we reach 10 attempts
         for (int i=0; i<attempts; i++) {
             if (this.delete()) {
@@ -424,7 +439,7 @@ public class ArbitraryDataFile {
         boolean success = false;
 
         // Delete the individual chunks
-        if (this.chunks != null && this.chunks.size() > 0) {
+        if (this.chunks != null && !this.chunks.isEmpty()) {
             Iterator iterator = this.chunks.iterator();
             while (iterator.hasNext()) {
                 ArbitraryDataFileChunk chunk = (ArbitraryDataFileChunk) iterator.next();
@@ -467,6 +482,10 @@ public class ArbitraryDataFile {
     }
 
     public byte[] getBytes() {
+        if (this.fileContent != null) {
+            return this.fileContent;
+        }
+
         try {
             return Files.readAllBytes(this.filePath);
         } catch (IOException e) {
@@ -690,7 +709,7 @@ public class ArbitraryDataFile {
     }
 
     public byte[] chunkHashes() throws DataException {
-        if (this.chunks != null && this.chunks.size() > 0) {
+        if (this.chunks != null && !this.chunks.isEmpty()) {
             // Return null if we only have one chunk, with the same hash as the parent
             if (Arrays.equals(this.digest(), this.chunks.get(0).digest())) {
                 return null;
@@ -717,7 +736,7 @@ public class ArbitraryDataFile {
     public List<byte[]> chunkHashList() {
         List<byte[]> chunks = new ArrayList<>();
 
-        if (this.chunks != null && this.chunks.size() > 0) {
+        if (this.chunks != null && !this.chunks.isEmpty()) {
             // Return null if we only have one chunk, with the same hash as the parent
             if (Arrays.equals(this.digest(), this.chunks.get(0).digest())) {
                 return null;
@@ -801,7 +820,7 @@ public class ArbitraryDataFile {
         String outputString = "";
         if (this.chunkCount() > 0) {
             for (ArbitraryDataFileChunk chunk : this.chunks) {
-                if (outputString.length() > 0) {
+                if (!outputString.isEmpty()) {
                     outputString = outputString.concat(",");
                 }
                 outputString = outputString.concat(chunk.digest58());
