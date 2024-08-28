@@ -15,15 +15,15 @@ import io.reticulum.packet.Packet;
 import io.reticulum.packet.PacketReceipt;
 import io.reticulum.packet.PacketReceiptStatus;
 import io.reticulum.transport.AnnounceHandler;
-import static io.reticulum.link.TeardownSession.DESTINATION_CLOSED;
-import static io.reticulum.link.TeardownSession.INITIATOR_CLOSED;
+//import static io.reticulum.link.TeardownSession.DESTINATION_CLOSED;
+//import static io.reticulum.link.TeardownSession.INITIATOR_CLOSED;
 import static io.reticulum.link.TeardownSession.TIMEOUT;
 import static io.reticulum.link.LinkStatus.ACTIVE;
 import static io.reticulum.link.LinkStatus.STALE;
-import static io.reticulum.link.LinkStatus.PENDING;
+//import static io.reticulum.link.LinkStatus.PENDING;
 import static io.reticulum.link.LinkStatus.HANDSHAKE;
 //import static io.reticulum.packet.PacketContextType.LINKCLOSE;
-import static io.reticulum.identity.IdentityKnownDestination.recall;
+//import static io.reticulum.identity.IdentityKnownDestination.recall;
 import static io.reticulum.utils.IdentityUtils.concatArrays;
 //import static io.reticulum.constant.ReticulumConstant.TRUNCATED_HASHLENGTH;
 import static io.reticulum.constant.ReticulumConstant.CONFIG_FILE_NAME;
@@ -33,7 +33,7 @@ import lombok.Data;
 import lombok.Synchronized;
 
 import org.qortal.repository.DataException;
-import org.qortal.settings.Settings;
+//import org.qortal.settings.Settings;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -55,7 +55,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 //import java.util.Random;
-import java.util.Scanner;
+//import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.codec.binary.Hex;
@@ -72,7 +72,7 @@ public class RNSNetwork {
     Reticulum reticulum;
     //private static final String APP_NAME = "qortal";
     static final String APP_NAME = RNSCommon.APP_NAME;
-    static final String defaultConfigPath = new String(".reticulum"); // if empty will look in Reticulums default paths
+    static final String defaultConfigPath = ".reticulum"; // if empty will look in Reticulums default paths
     //static final String defaultConfigPath = RNSCommon.defaultRNSConfigPath;
     //private final String defaultConfigPath = Settings.getInstance().getDefaultRNSConfigPathForReticulum();
     private static Integer MAX_PEERS = 12;
@@ -128,7 +128,7 @@ public class RNSNetwork {
         var serverIdentityPath = reticulum.getStoragePath().resolve("identities/"+APP_NAME);
         if (Files.isReadable(serverIdentityPath)) {
             serverIdentity = Identity.fromFile(serverIdentityPath);
-            log.info("server identity loaded from file {}", serverIdentityPath.toString());
+            log.info("server identity loaded from file {}", serverIdentityPath);
         } else {
             serverIdentity = new Identity();
             log.info("APP_NAME: {}, storage path: {}", APP_NAME, serverIdentityPath);
@@ -164,7 +164,7 @@ public class RNSNetwork {
         //    "core",
         //    "qdn"
         //);
-        log.info("Destination "+Hex.encodeHexString(baseDestination.getHash())+" "+baseDestination.getName()+" running.");
+        log.info("Destination {} {} running", Hex.encodeHexString(baseDestination.getHash()), baseDestination.getName());
    
         baseDestination.setProofStrategy(ProofStrategy.PROVE_ALL);
         baseDestination.setAcceptLinkRequests(true);
@@ -183,7 +183,7 @@ public class RNSNetwork {
     }
 
     private void initConfig(String configDir) throws IOException {
-        File configDir1 = new File(defaultConfigPath);
+        File configDir1 = new File(configDir);
         if (!configDir1.exists()) {
             configDir1.mkdir();
         }
@@ -217,7 +217,7 @@ public class RNSNetwork {
             try {
                 TimeUnit.SECONDS.sleep(1); // allow for peers to disconnect gracefully
             } catch (InterruptedException e) {
-                log.error("exception: {}", e);
+                log.error("exception: ", e);
             }
         }
         // gracefully close links of peers that point to us
@@ -241,12 +241,12 @@ public class RNSNetwork {
     }
 
     public void closePacketDelivered(PacketReceipt receipt) {
-        var rttString = new String("");
+        var rttString = "";
         if (receipt.getStatus() == PacketReceiptStatus.DELIVERED) {
             var rtt = receipt.getRtt();    // rtt (Java) is in miliseconds
             //log.info("qqp - packetDelivered - rtt: {}", rtt);
             if (rtt >= 1000) {
-                rtt = Math.round(rtt / 1000);
+                rtt = Math.round((float) rtt / 1000);
                 rttString = String.format("%d seconds", rtt);
             } else {
                 rttString = String.format("%d miliseconds", rtt);
@@ -271,7 +271,7 @@ public class RNSNetwork {
                 peer.getOrInitPeerLink();
         } else {
             log.info("non-initiator closed link (link lookup: {}), link destination hash (initiator): {}",
-                peer, link, Hex.encodeHexString(link.getDestination().getHash()));
+                link, Hex.encodeHexString(link.getDestination().getHash()));
         }
         incomingLinks.add(link);
         log.info("***> Client connected, link: {}", link);
@@ -284,7 +284,7 @@ public class RNSNetwork {
                 Hex.encodeHexString(peer.getDestinationHash()), link, Hex.encodeHexString(link.getDestination().getHash()));
         } else {
             log.info("non-initiator closed link (link lookup: {}), link destination hash (initiator): {}",
-                peer, link, Hex.encodeHexString(link.getDestination().getHash()));
+                link, Hex.encodeHexString(link.getDestination().getHash()));
         }
         // if we have a peer pointing to that destination, we can close and remove it
         peer = findPeerByDestinationHash(link.getDestination().getHash());
@@ -369,7 +369,7 @@ public class RNSNetwork {
                         if (nonNull(p.getPeerLink())) {
                             log.info("QAnnounceHandler - other peer - link: {}, status: {}", p.getPeerLink(), p.getPeerLink().getStatus());
                         } else {
-                            log.info("QAnnounceHandler - null link peer - link: {}", p.getPeerLink());
+                            log.info("QAnnounceHandler - peer link is null");
                         }
                     }
                 }
@@ -450,13 +450,13 @@ public class RNSNetwork {
         return SingletonContainer.INSTANCE;
     }
 
-    public Identity getServerIdentity() {
-        return this.serverIdentity;
-    }
+    //public Identity getServerIdentity() {
+    //    return this.serverIdentity;
+    //}
 
-    public Reticulum getReticulum() {
-        return this.reticulum;
-    }
+    //public Reticulum getReticulum() {
+    //    return this.reticulum;
+    //}
 
     public List<RNSPeer> getLinkedPeers() {
         synchronized(this.linkedPeers) {
@@ -471,9 +471,9 @@ public class RNSNetwork {
         }
     }
 
-    public Destination getBaseDestination() {
-        return baseDestination;
-    }
+    //public Destination getBaseDestination() {
+    //    return baseDestination;
+    //}
 
     // maintenance
     //public void removePeer(RNSPeer peer) {
@@ -537,7 +537,7 @@ public class RNSNetwork {
             try {
                 TimeUnit.SECONDS.sleep(2); // allow for peers to disconnect gracefully
             } catch (InterruptedException e) {
-                log.error("exception: {}", e);
+                log.error("exception: ", e);
             }
             if ((nonNull(pLink) && (pLink.getStatus() == ACTIVE))) {
                 activePeerCount = activePeerCount + 1;

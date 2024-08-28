@@ -1,16 +1,16 @@
 package org.qortal.network;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+//import org.slf4j.Logger;
+//import org.slf4j.LoggerFactory;
 
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
-import java.io.IOException;
+//import java.io.IOException;
 import java.time.Instant;
 import java.util.Arrays;
 
-import io.reticulum.Reticulum;
-import org.qortal.network.RNSNetwork;
+//import io.reticulum.Reticulum;
+//import org.qortal.network.RNSNetwork;
 import io.reticulum.link.Link;
 import io.reticulum.link.RequestReceipt;
 import io.reticulum.packet.PacketReceiptStatus;
@@ -27,7 +27,7 @@ import static io.reticulum.link.TeardownSession.INITIATOR_CLOSED;
 import static io.reticulum.link.TeardownSession.DESTINATION_CLOSED;
 import static io.reticulum.link.TeardownSession.TIMEOUT;
 import static io.reticulum.link.LinkStatus.ACTIVE;
-import static io.reticulum.link.LinkStatus.CLOSED;
+//import static io.reticulum.link.LinkStatus.CLOSED;
 import static io.reticulum.identity.IdentityKnownDestination.recall;
 //import static io.reticulum.identity.IdentityKnownDestination.recallAppData;
 
@@ -46,9 +46,9 @@ import lombok.AccessLevel;
 public class RNSPeer {
 
     //static final String APP_NAME = "qortal";
-    static final String APP_NAME = RNSCommon.APP_NAME;
+    //static final String APP_NAME = RNSCommon.APP_NAME;
     //static final String defaultConfigPath = new String(".reticulum");
-    static final String defaultConfigPath = RNSCommon.defaultRNSConfigPath;
+    //static final String defaultConfigPath = RNSCommon.defaultRNSConfigPath;
 
     private byte[] destinationHash;   // remote destination hash
     Destination peerDestination;      // OUT destination created for this
@@ -174,16 +174,16 @@ public class RNSPeer {
 
     /** PacketReceipt callbacks */
     public void packetDelivered(PacketReceipt receipt) {
-        var rttString = new String("");
+        var rttString = "";
         //log.info("packet delivered callback, receipt: {}", receipt);
         if (receipt.getStatus() == PacketReceiptStatus.DELIVERED) {
-            var rtt = receipt.getRtt();    // rtt (Java) is in miliseconds
+            var rtt = receipt.getRtt();    // rtt (Java) is in milliseconds
             //log.info("qqp - packetDelivered - rtt: {}", rtt);
             if (rtt >= 1000) {
-                rtt = Math.round(rtt / 1000);
+                rtt = Math.round((float) rtt / 1000);
                 rttString = String.format("%d seconds", rtt);
             } else {
-                rttString = String.format("%d miliseconds", rtt);
+                rttString = String.format("%d milliseconds", rtt);
             }
             log.info("Valid reply received from {}, round-trip time is {}",
                     Hex.encodeHexString(receipt.getDestination().getHash()), rttString);

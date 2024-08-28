@@ -10,7 +10,7 @@ public class RNSCommon {
     /**
      * Configuration path relative to the Qortal launch directory
      */
-    public static String defaultRNSConfigPath = new String(".reticulum");
+    public static String defaultRNSConfigPath = ".reticulum";
 
     ///**
     // * Qortal RNS Destinations
