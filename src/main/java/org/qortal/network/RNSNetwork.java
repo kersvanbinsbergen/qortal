@@ -33,7 +33,7 @@ import lombok.Data;
 import lombok.Synchronized;
 
 import org.qortal.repository.DataException;
-//import org.qortal.settings.Settings;
+import org.qortal.settings.Settings;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -71,14 +71,15 @@ public class RNSNetwork {
 
     Reticulum reticulum;
     //private static final String APP_NAME = "qortal";
-    static final String APP_NAME = RNSCommon.APP_NAME;
-    static final String defaultConfigPath = ".reticulum"; // if empty will look in Reticulums default paths
+    static final String APP_NAME = Settings.getInstance().isTestNet() ? RNSCommon.TESTNET_APP_NAME: RNSCommon.MAINNET_APP_NAME;
+    //static final String defaultConfigPath = ".reticulum"; // if empty will look in Reticulums default paths
+    static final String defaultConfigPath = Settings.getInstance().isTestNet() ? RNSCommon.defaultRNSConfigPathTestnet: RNSCommon.defaultRNSConfigPath;
     //static final String defaultConfigPath = RNSCommon.defaultRNSConfigPath;
-    //private final String defaultConfigPath = Settings.getInstance().getDefaultRNSConfigPathForReticulum();
+    //private final String defaultConfigPath = Settings.getInstance().getReticulumDefaultConfigPath();
     private static Integer MAX_PEERS = 12;
-    //private final Integer MAX_PEERS = Settings.getInstance().getMaxReticulumPeers();
+    //private final Integer MAX_PEERS = Settings.getInstance().getReticulumMaxPeers();
     private static Integer MIN_DESIRED_PEERS = 3;
-    //private final Integer MIN_DESIRED_PEERS = Settings.getInstance().getMinDesiredPeers();
+    //private final Integer MIN_DESIRED_PEERS = Settings.getInstance().getReticulumMinDesiredPeers();
     Identity serverIdentity;
     public Destination baseDestination;
     private volatile boolean isShuttingDown = false;
@@ -155,13 +156,12 @@ public class RNSNetwork {
             APP_NAME,
             "core"
         );
-        //// idea for other entry point
+        //// idea for other entry point (needs AnnounceHandler with appropriate aspect)
         //dataDestination = new Destination(
         //    serverIdentity,
         //    Direction.IN,
         //    DestinationType.SINGLE,
         //    APP_NAME,
-        //    "core",
         //    "qdn"
         //);
         log.info("Destination {} {} running", Hex.encodeHexString(baseDestination.getHash()), baseDestination.getName());
@@ -322,12 +322,13 @@ public class RNSNetwork {
     //    getBaseDestination().announce();
     //}
 
-    //@Slf4j
     private class QAnnounceHandler implements AnnounceHandler {
         @Override
         public String getAspectFilter() {
             // handle all announces
-            return null;
+            //return null;
+            // handle cortal.core announces
+            return "qortal.core";
         }
 
         @Override

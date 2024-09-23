@@ -31,6 +31,8 @@ import static io.reticulum.link.LinkStatus.ACTIVE;
 import static io.reticulum.identity.IdentityKnownDestination.recall;
 //import static io.reticulum.identity.IdentityKnownDestination.recallAppData;
 
+import org.qortal.settings.Settings;
+
 import java.nio.charset.StandardCharsets;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import org.apache.commons.codec.binary.Hex;
@@ -45,8 +47,7 @@ import lombok.AccessLevel;
 @Slf4j
 public class RNSPeer {
 
-    //static final String APP_NAME = "qortal";
-    //static final String APP_NAME = RNSCommon.APP_NAME;
+    static final String APP_NAME = Settings.getInstance().isTestNet() ? RNSCommon.TESTNET_APP_NAME: RNSCommon.MAINNET_APP_NAME;
     //static final String defaultConfigPath = new String(".reticulum");
     //static final String defaultConfigPath = RNSCommon.defaultRNSConfigPath;
 
@@ -75,7 +76,7 @@ public class RNSPeer {
             this.serverIdentity,
             Direction.OUT, 
             DestinationType.SINGLE,
-            RNSNetwork.APP_NAME,
+            APP_NAME,
             "core"
         );
         peerDestination.setProofStrategy(ProofStrategy.PROVE_ALL);
@@ -221,7 +222,7 @@ public class RNSPeer {
     public void linkResourceTransferStarted(Resource resource) {
         log.debug("Resource transfer started");
     }
-    public void linkResourceTransferComcluded(Resource resource) {
+    public void linkResourceTransferConcluded(Resource resource) {
         log.debug("Resource transfer complete");
     }
 
