@@ -191,7 +191,10 @@ public class RNSNetwork {
         Path configFile = configPath.resolve(CONFIG_FILE_NAME);
 
         if (Files.notExists(configFile)) {
-            var defaultConfig = this.getClass().getClassLoader().getResourceAsStream("reticulum_default_config.yml");
+            var defaultConfig = this.getClass().getClassLoader().getResourceAsStream(RNSCommon.defaultRNSConfig);
+            if (Settings.getInstance().isTestNet()) {
+                defaultConfig = this.getClass().getClassLoader().getResourceAsStream(RNSCommon.defaultRNSConfigTetnet);
+            }
             Files.copy(defaultConfig, configFile, StandardCopyOption.REPLACE_EXISTING);
         }
     }

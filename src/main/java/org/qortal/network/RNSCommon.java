@@ -14,6 +14,12 @@ public class RNSCommon {
     public static String defaultRNSConfigPath = ".reticulum";
     public static String defaultRNSConfigPathTestnet = ".reticulum_test";
 
+    /**
+     * Default config
+     */
+    public static String defaultRNSConfig = "reticulum_default_config.yml";
+    public static String defaultRNSConfigTetnet = "reticulum_default_testnet_config.yml";
+
     ///**
     // * Qortal RNS Destinations
     // */
