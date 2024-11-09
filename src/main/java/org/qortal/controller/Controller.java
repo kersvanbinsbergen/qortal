@@ -13,6 +13,7 @@ import org.qortal.block.Block;
 import org.qortal.block.BlockChain;
 import org.qortal.block.BlockChain.BlockTimingByHeight;
 import org.qortal.controller.arbitrary.*;
+import org.qortal.controller.hsqldb.HSQLDBDataCacheManager;
 import org.qortal.controller.repository.NamesDatabaseIntegrityCheck;
 import org.qortal.controller.repository.PruneManager;
 import org.qortal.controller.tradebot.TradeBot;
@@ -33,8 +34,10 @@ import org.qortal.gui.SysTray;
 import org.qortal.network.Network;
 import org.qortal.network.RNSNetwork;
 import org.qortal.network.Peer;
+import org.qortal.network.PeerAddress;
 import org.qortal.network.message.*;
 import org.qortal.repository.*;
+import org.qortal.repository.hsqldb.HSQLDBRepository;
 import org.qortal.repository.hsqldb.HSQLDBRepositoryFactory;
 import org.qortal.settings.Settings;
 import org.qortal.transaction.Transaction;
@@ -49,8 +52,11 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
 import java.security.Security;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -96,7 +102,7 @@ public class Controller extends Thread {
 	private final long buildTimestamp; // seconds
 	private final String[] savedArgs;
 
-	private ExecutorService callbackExecutor = Executors.newFixedThreadPool(3);
+	private ExecutorService callbackExecutor = Executors.newFixedThreadPool(4);
 	private volatile boolean notifyGroupMembershipChange = false;
 
 	/** Latest blocks on our chain. Note: tail/last is the latest block. */
@@ -404,8 +410,17 @@ public class Controller extends Thread {
 			RepositoryManager.setRequestedCheckpoint(Boolean.TRUE);
 
 			try (final Repository repository = RepositoryManager.getRepository()) {
-				RepositoryManager.rebuildTransactionSequences(repository);
+				// RepositoryManager.rebuildTransactionSequences(repository);
 				ArbitraryDataCacheManager.getInstance().buildArbitraryResourcesCache(repository, false);
+
+				if( Settings.getInstance().isDbCacheEnabled() ) {
+					LOGGER.info("Db Cache Starting ...");
+					HSQLDBDataCacheManager hsqldbDataCacheManager = new HSQLDBDataCacheManager((HSQLDBRepository) repositoryFactory.getRepository());
+					hsqldbDataCacheManager.start();
+				}
+				else {
+					LOGGER.info("Db Cache Disabled");
+				}
 			}
 		} catch (DataException e) {
 			// If exception has no cause or message then repository is in use by some other process.
@@ -496,7 +511,6 @@ public class Controller extends Thread {
 			@Override
 			public void run() {
 				Thread.currentThread().setName("Shutdown hook");
-
 				Controller.getInstance().shutdown();
 			}
 		});
@@ -576,10 +590,33 @@ public class Controller extends Thread {
 		// If GUI is enabled, we're no longer starting up but actually running now
 		Gui.getInstance().notifyRunning();
 
-		// Check every 10 minutes to see if the block minter is running
-		Timer timer = new Timer();
+		if (Settings.getInstance().isAutoRestartEnabled()) {
+			// Check every 10 minutes if we have enough connected peers
+			Timer checkConnectedPeers = new Timer();
 
-		timer.schedule(new TimerTask() {
+			checkConnectedPeers.schedule(new TimerTask() {
+				@Override
+				public void run() {
+					// Get the connected peers
+					int myConnectedPeers = Network.getInstance().getImmutableHandshakedPeers().size();
+					LOGGER.debug("Node have {} connected peers", myConnectedPeers);
+					if (myConnectedPeers == 0) {
+						// Restart node if we have 0 peers
+						LOGGER.info("Node have no connected peers, restarting node");
+						try {
+							RestartNode.attemptToRestart();
+						} catch (Exception e) {
+							LOGGER.error("Unable to restart the node", e);
+						}
+					}
+				}
+			}, 10*60*1000, 10*60*1000);
+		}
+
+		// Check every 10 minutes to see if the block minter is running
+		Timer checkBlockMinter = new Timer();
+
+		checkBlockMinter.schedule(new TimerTask() {
 			@Override
 			public void run() {
 				if (blockMinter.isAlive()) {
@@ -603,6 +640,73 @@ public class Controller extends Thread {
 				}
 			}
 		}, 10*60*1000, 10*60*1000);
+
+		// Check if we need sync from genesis and start syncing
+		Timer syncFromGenesis = new Timer();
+		syncFromGenesis.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				LOGGER.debug("Start sync from genesis check.");
+				boolean canBootstrap = Settings.getInstance().getBootstrap();
+				boolean needsArchiveRebuild = false;
+				int checkHeight = 0;
+				Repository repository = null;
+
+				try {
+					repository = RepositoryManager.getRepository();
+					needsArchiveRebuild = (repository.getBlockArchiveRepository().fromHeight(2) == null);
+					checkHeight = repository.getBlockRepository().getBlockchainHeight();
+				} catch (DataException e) {
+					throw new RuntimeException(e);
+				}
+
+				if (canBootstrap || !needsArchiveRebuild || checkHeight > 3) {
+					LOGGER.debug("Bootstrapping is enabled or we have more than 2 blocks, cancel sync from genesis check.");
+					syncFromGenesis.cancel();
+					return;
+				}
+
+				if (needsArchiveRebuild && !canBootstrap) {
+					LOGGER.info("Start syncing from genesis!");
+					List<Peer> seeds = new ArrayList<>(Network.getInstance().getImmutableHandshakedPeers());
+
+					// Check if have a qualified peer to sync
+					if (seeds.isEmpty()) {
+						LOGGER.info("No connected peers, will try again later.");
+						return;
+					}
+
+					int index = new SecureRandom().nextInt(seeds.size());
+					String syncNode = String.valueOf(seeds.get(index));
+					PeerAddress peerAddress = PeerAddress.fromString(syncNode);
+					InetSocketAddress resolvedAddress = null;
+
+					try {
+						resolvedAddress = peerAddress.toSocketAddress();
+					} catch (UnknownHostException e) {
+						throw new RuntimeException(e);
+					}
+
+					InetSocketAddress finalResolvedAddress = resolvedAddress;
+					Peer targetPeer = seeds.stream().filter(peer -> peer.getResolvedAddress().equals(finalResolvedAddress)).findFirst().orElse(null);
+					Synchronizer.SynchronizationResult syncResult;
+
+					try {
+						do {
+							try {
+								syncResult = Synchronizer.getInstance().actuallySynchronize(targetPeer, true);
+							} catch (InterruptedException e) {
+								throw new RuntimeException(e);
+							}
+						}
+						while (syncResult == Synchronizer.SynchronizationResult.OK);
+					} finally {
+						// We are syncing now, so can cancel the check
+						syncFromGenesis.cancel();
+					}
+				}
+			}
+		}, 3*60*1000, 3*60*1000);
 	}
 
 	/** Called by AdvancedInstaller's launch EXE in single-instance mode, when an instance is already running. */
