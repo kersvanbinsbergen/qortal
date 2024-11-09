@@ -114,6 +114,8 @@ public class Settings {
 
 	/** Whether we check, fetch and install auto-updates */
 	private boolean autoUpdateEnabled = true;
+	/** Whether we check, restart node without connected peers */
+	private boolean autoRestartEnabled = false;
 	/** How long between repository backups (ms), or 0 if disabled. */
 	private long repositoryBackupInterval = 0; // ms
 	/** Whether to show a notification when we backup repository. */
@@ -197,32 +199,32 @@ public class Settings {
 	/** Target number of outbound connections to peers we should make. */
 	private int minOutboundPeers = 32;
 	/** Maximum number of peer connections we allow. */
-	private int maxPeers = 60;
+	private int maxPeers = 64;
 	/** Number of slots to reserve for short-lived QDN data transfers */
 	private int maxDataPeers = 5;
 	/** Maximum number of threads for network engine. */
-	private int maxNetworkThreadPoolSize = 620;
+	private int maxNetworkThreadPoolSize = 512;
 	/** Maximum number of threads for network proof-of-work compute, used during handshaking. */
-	private int networkPoWComputePoolSize = 2;
+	private int networkPoWComputePoolSize = 4;
 	/** Maximum number of retry attempts if a peer fails to respond with the requested data */
-	private int maxRetries = 2;
+	private int maxRetries = 3;
 
 	/** The number of seconds of no activity before recovery mode begins */
 	public long recoveryModeTimeout = 9999999999999L;
 
 	/** Minimum peer version number required in order to sync with them */
-	private String minPeerVersion = "4.5.1";
+	private String minPeerVersion = "4.6.0";
 	/** Whether to allow connections with peers below minPeerVersion
 	 * If true, we won't sync with them but they can still sync with us, and will show in the peers list
 	 * If false, sync will be blocked both ways, and they will not appear in the peers list */
 	private boolean allowConnectionsWithOlderPeerVersions = true;
 
 	/** Minimum time (in seconds) that we should attempt to remain connected to a peer for */
-	private int minPeerConnectionTime = 60 * 60; // seconds
+	private int minPeerConnectionTime = 2 * 60 * 60; // seconds
 	/** Maximum time (in seconds) that we should attempt to remain connected to a peer for */
 	private int maxPeerConnectionTime = 4 * 60 * 60; // seconds
 	/** Maximum time (in seconds) that a peer should remain connected when requesting QDN data */
-	private int maxDataPeerConnectionTime = 2 * 60; // seconds
+	private int maxDataPeerConnectionTime = 30 * 60; // seconds
 
 	/** Whether to sync multiple blocks at once in normal operation */
 	private boolean fastSyncEnabled = true;
@@ -272,7 +274,8 @@ public class Settings {
 	private String[] bootstrapHosts = new String[] {
 		"http://bootstrap.qortal.org",
 		"http://bootstrap2.qortal.org",
-		"http://bootstrap3.qortal.org"
+		"http://bootstrap3.qortal.org",
+		"http://bootstrap4.qortal.org"
 	};
 
 	// Auto-update sources
@@ -323,10 +326,13 @@ public class Settings {
 	/* Foreign chains */
 
 	/** The number of consecutive empty addresses required before treating a wallet's transaction set as complete */
-	private int gapLimit = 24;
+	private int gapLimit = 3;
 
 	/** How many wallet keys to generate when using bitcoinj as the blockchain interface (e.g. when sending coins) */
 	private int bitcoinjLookaheadSize = 50;
+
+	/** How many units of data to be kept in a blockchain cache before the cache should be reduced or cleared. */
+	private int blockchainCacheLimit = 1000;
 
 	// Data storage (QDN)
 
@@ -374,6 +380,66 @@ public class Settings {
 	 * Exclude from settings.json to disable this warning. */
 	private Integer threadCountPerMessageTypeWarningThreshold = null;
 
+	/**
+	 * DB Cache Enabled?
+	 */
+	private boolean dbCacheEnabled = false;
+
+	/**
+	 * DB Cache Thread Priority
+	 *
+	 * If DB Cache is disabled, then this is ignored. If value is lower then 1, than 1 is used. If value is higher
+	 * than 10,, then 10 is used.
+	 */
+	private int dbCacheThreadPriority = 1;
+
+	/**
+	 * DB Cache Frequency
+	 *
+	 * The number of seconds in between DB cache updates. If DB Cache is disabled, then this is ignored.
+	 */
+	private int dbCacheFrequency = 120;
+
+	/**
+	 * Network Thread Priority
+	 *
+	 * The Network Thread Priority
+	 *
+	 * The thread priority (1 is lowest, 10 is highest) of the threads used for network peer connections. This is the
+	 * main thread connecting to a peer in the network.
+	 */
+    private int networkThreadPriority = 7;
+
+	/**
+	 * The Handshake Thread Priority
+	 *
+	 * The thread priority (1 i slowest, 10 is highest) of the threads used for peer handshake messaging. This is a
+	 * secondary thread to exchange status messaging to a peer in the network.
+	 */
+	private int handshakeThreadPriority = 7;
+
+	/**
+	 * Pruning Thread Priority
+	 *
+	 * The thread priority (1 is lowest, 10 is highest) of the threads used for database pruning and trimming.
+	 */
+	private int pruningThreadPriority = 2;
+
+	/**
+	 * Sychronizer Thread Priority
+	 *
+	 * The thread priority (1 is lowest, 10 is highest) of the threads used for synchronizing with the others peers.
+	 */
+	private int synchronizerThreadPriority = 10;
+
+	/**
+	 * Archiving Pause
+	 *
+	 * In milliseconds
+	 *
+	 * The pause in between archiving blocks to allow other processes to execute.
+	 */
+	private long archivingPause = 3000;
 
 	// Domain mapping
 	public static class ThreadLimit {
@@ -909,6 +975,10 @@ public class Settings {
 		return this.autoUpdateEnabled;
 	}
 
+	public boolean isAutoRestartEnabled() {
+		return this.autoRestartEnabled;
+	}
+
 	public String[] getAutoUpdateRepos() {
 		return this.autoUpdateRepos;
 	}
@@ -1049,6 +1119,9 @@ public class Settings {
 		return bitcoinjLookaheadSize;
 	}
 
+	public int getBlockchainCacheLimit() {
+		return blockchainCacheLimit;
+	}
 
 	public boolean isQdnEnabled() {
 		return this.qdnEnabled;
@@ -1124,5 +1197,37 @@ public class Settings {
 
 	public Integer getThreadCountPerMessageTypeWarningThreshold() {
 		return this.threadCountPerMessageTypeWarningThreshold;
+	}
+
+	public boolean isDbCacheEnabled() {
+		return dbCacheEnabled;
+	}
+
+	public int getDbCacheThreadPriority() {
+		return dbCacheThreadPriority;
+	}
+
+	public int getDbCacheFrequency() {
+		return dbCacheFrequency;
+	}
+
+	public int getNetworkThreadPriority() {
+		return networkThreadPriority;
+	}
+
+	public int getHandshakeThreadPriority() {
+		return handshakeThreadPriority;
+	}
+
+	public int getPruningThreadPriority() {
+		return pruningThreadPriority;
+	}
+
+	public int getSynchronizerThreadPriority() {
+		return synchronizerThreadPriority;
+	}
+
+	public long getArchivingPause() {
+		return archivingPause;
 	}
 }
