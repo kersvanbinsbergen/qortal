@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>org.qortal</groupId>
 	<artifactId>qortal</artifactId>
-	<version>4.6.1</version>
+	<version>4.6.2</version>
 	<packaging>jar</packaging>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -45,7 +45,7 @@
 		<maven-dependency-plugin.version>3.6.1</maven-dependency-plugin.version>
 		<maven-jar-plugin.version>3.4.2</maven-jar-plugin.version>
 		<maven-package-info-plugin.version>1.1.0</maven-package-info-plugin.version>
-		<maven-plugin.version>2.17.1</maven-plugin.version>
+		<maven-plugin.version>2.18.0</maven-plugin.version>
 		<maven-reproducible-build-plugin.version>0.17</maven-reproducible-build-plugin.version>
 		<maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
 		<maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
@@ -54,7 +54,7 @@
 		<replacer.version>1.5.3</replacer.version>
 		<simplemagic.version>1.17</simplemagic.version>
 		<swagger-api.version>2.0.10</swagger-api.version>
-		<swagger-ui.version>5.17.14</swagger-ui.version>
+		<swagger-ui.version>5.18.2</swagger-ui.version>
 		<upnp.version>1.2</upnp.version>
 		<xz.version>1.10</xz.version>
    	<lombok.version>1.18.30</lombok.version>
