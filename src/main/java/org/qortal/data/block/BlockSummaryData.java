@@ -122,11 +122,6 @@ public class BlockSummaryData {
 		}
 	}
 
-	@XmlElement(name = "minterLevel")
-	public Integer getMinterLevelXml() {
-		return this.getMinterLevel();
-	}
-
 	@Override
 	public boolean equals(Object o) {
 		if (this == o)
