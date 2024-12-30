@@ -1245,17 +1245,17 @@ public class Controller extends Thread {
 	}
 
 	public void doRNSNetworkBroadcast() {
-		if (Settings.getInstance().isLite()) {
-			// Lite nodes have nothing to broadcast
-			return;
-		}
-		RNSNetwork network = RNSNetwork.getInstance();
+		//if (Settings.getInstance().isLite()) {
+		//	// Lite nodes have nothing to broadcast
+		//	return;
+		//}
+		//RNSNetwork network = RNSNetwork.getInstance();
 
 		//// Send our current height
 		//network.broadcastOurChain();
 
-		//// Requiest unconfirmed transaction signatures, but only if we're up-to-date.
-		//// if we're not up-to-dat then then priority is synchronizing first
+		//// Request unconfirmed transaction signatures, but only if we're up-to-date.
+		//// if we're not up-to-dat then priority is synchronizing first
 		//if (isUpToDate()) {
 		//	network.broadcast(network::buildGetUnconfirmedTransactionsMessage);
 		//}

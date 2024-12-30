@@ -48,6 +48,9 @@ JVM_MEMORY_ARGS="-XX:MaxRAMPercentage=50 -XX:+UseG1GC -Xss1024k"
 nohup nice -n 20 java \
 	-Djava.net.preferIPv4Stack=false \
 	${JVM_MEMORY_ARGS} \
+  --add-opens=java.base/java.lang=ALL-UNNAMED \
+  --add-opens=java.base/java.net=ALL-UNNAMED \
+  --illegal-access=warn \
 	-jar qortal.jar \
 	1>run.log 2>&1 &
 

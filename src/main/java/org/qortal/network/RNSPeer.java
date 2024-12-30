@@ -30,13 +30,18 @@ import static io.reticulum.link.LinkStatus.ACTIVE;
 //import static io.reticulum.link.LinkStatus.CLOSED;
 import static io.reticulum.identity.IdentityKnownDestination.recall;
 //import static io.reticulum.identity.IdentityKnownDestination.recallAppData;
+import io.reticulum.buffer.Buffer;
+import io.reticulum.buffer.BufferedRWPair;
+import static io.reticulum.utils.IdentityUtils.concatArrays;
 
 import org.qortal.settings.Settings;
 
 import java.nio.charset.StandardCharsets;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import org.apache.commons.codec.binary.Hex;
+import static org.apache.commons.codec.binary.Hex.encodeHexString;
 import static org.apache.commons.lang3.ArrayUtils.subarray;
+import static org.apache.commons.lang3.BooleanUtils.isFalse;
+import static org.apache.commons.lang3.BooleanUtils.isTrue;
 
 import lombok.extern.slf4j.Slf4j;
 import lombok.Setter;
@@ -57,20 +62,48 @@ public class RNSPeer {
     @Setter(AccessLevel.PACKAGE) private Instant creationTimestamp;
     private Instant lastAccessTimestamp;
     Link peerLink;
+    byte[] peerLinkHash;
+    BufferedRWPair peerBuffer;
+    int receiveStreamId = 0;
+    int sendStreamId = 0;
     private Boolean isInitiator;
     private Boolean deleteMe = false;
+    private Boolean isVacant = true;
 
     private Double requestResponseProgress;
     @Setter(AccessLevel.PACKAGE) private Boolean peerTimedOut = false;
 
+    /**
+     * Constructor for initiator peers
+     */
     public RNSPeer(byte[] dhash) {
-        destinationHash = dhash;
-        serverIdentity = recall(dhash);
+        this.destinationHash = dhash;
+        this.serverIdentity = recall(dhash);
         initPeerLink();
         //setCreationTimestamp(System.currentTimeMillis());
-        creationTimestamp = Instant.now();
+        this.creationTimestamp = Instant.now();
+        this.isVacant = true;
     }
 
+    /**
+     * Constructor for non-initiator peers
+     */
+    public RNSPeer(Link link) {
+        this.peerLink = link;
+        //this.peerLinkId = link.getLinkId();
+        this.peerDestination = link.getDestination();
+        this.destinationHash = link.getDestination().getHash();
+        this.serverIdentity = link.getRemoteIdentity();
+
+        this.creationTimestamp = Instant.now();
+        this.lastAccessTimestamp = null;
+        this.isInitiator = false;
+        this.isVacant = false;
+
+        //this.peerLink.setLinkEstablishedCallback(this::linkEstablished);
+        //this.peerLink.setLinkClosedCallback(this::linkClosed);
+        //this.peerLink.setPacketCallback(this::linkPacketReceived);
+    }
     public void initPeerLink() {
         peerDestination = new Destination(
             this.serverIdentity,
@@ -81,14 +114,30 @@ public class RNSPeer {
         );
         peerDestination.setProofStrategy(ProofStrategy.PROVE_ALL);
 
-        lastAccessTimestamp = Instant.now();
-        isInitiator = true;
+        this.creationTimestamp = Instant.now();
+        this.lastAccessTimestamp = null;
+        this.isInitiator = true;
 
-        peerLink = new Link(peerDestination);
+        this.peerLink = new Link(peerDestination);
 
         this.peerLink.setLinkEstablishedCallback(this::linkEstablished);
         this.peerLink.setLinkClosedCallback(this::linkClosed);
         this.peerLink.setPacketCallback(this::linkPacketReceived);
+    }
+
+    public BufferedRWPair getOrInitPeerBuffer() {
+        var channel = this.peerLink.getChannel();
+        if (nonNull(this.peerBuffer)) {
+            log.info("peerBuffer exists: {}, link status: {}", this.peerBuffer, this.peerLink.getStatus());
+            this.peerBuffer.close();
+            this.peerBuffer = Buffer.createBidirectionalBuffer(receiveStreamId, sendStreamId, channel, this::peerBufferReady);
+            //return this.peerBuffer;
+        }
+        else {
+            log.info("creating buffer - peerLink status: {}, channel: {}", this.peerLink.getStatus(), channel);
+            this.peerBuffer = Buffer.createBidirectionalBuffer(receiveStreamId, sendStreamId, channel, this::peerBufferReady);
+        }
+        return getPeerBuffer();
     }
 
     public Link getOrInitPeerLink() {
@@ -102,10 +151,15 @@ public class RNSPeer {
     }
 
     public void shutdown() {
-        if (nonNull(peerLink)) {
+        if (nonNull(this.peerLink)) {
             log.info("shutdown - peerLink: {}, status: {}", peerLink, peerLink.getStatus());
             if (peerLink.getStatus() == ACTIVE) {
+                if (isFalse(this.isInitiator)) {
+                    sendCloseToRemote(this.peerLink);
+                }
                 peerLink.teardown();
+            }else {
+                log.info("shutdown - status (non-ACTIVE): {}", peerLink.getStatus());
             }
             this.peerLink = null;
         }
@@ -125,8 +179,8 @@ public class RNSPeer {
     public void linkEstablished(Link link) {
         link.setLinkClosedCallback(this::linkClosed);
         log.info("peerLink {} established (link: {}) with peer: hash - {}, link destination hash: {}", 
-            peerLink, link, Hex.encodeHexString(destinationHash),
-            Hex.encodeHexString(link.getDestination().getHash()));
+            peerLink, link, encodeHexString(destinationHash),
+            encodeHexString(link.getDestination().getHash()));
     }
     
     public void linkClosed(Link link) {
@@ -136,11 +190,11 @@ public class RNSPeer {
         } else if (link.getTeardownReason() == INITIATOR_CLOSED) {
             log.info("Link closed callback: The initiator closed the link");
             log.info("peerLink {} closed (link: {}), link destination hash: {}",
-                peerLink, link, Hex.encodeHexString(link.getDestination().getHash()));
+                peerLink, link, encodeHexString(link.getDestination().getHash()));
         } else if (link.getTeardownReason() == DESTINATION_CLOSED) {
             log.info("Link closed callback: The link was closed by the peer, removing peer");
             log.info("peerLink {} closed (link: {}), link destination hash: {}",
-                peerLink, link, Hex.encodeHexString(link.getDestination().getHash()));
+                peerLink, link, encodeHexString(link.getDestination().getHash()));
         } else {
             log.info("Link closed callback");
         }
@@ -153,8 +207,8 @@ public class RNSPeer {
         } else if (msgText.startsWith("close::")) {
             var targetPeerHash = subarray(message, 7, message.length);
             log.info("peer dest hash: {}, target hash: {}",
-                Hex.encodeHexString(destinationHash),
-                Hex.encodeHexString(targetPeerHash));
+                encodeHexString(destinationHash),
+                encodeHexString(targetPeerHash));
             if (Arrays.equals(destinationHash, targetPeerHash)) {
                 log.info("closing link: {}", peerLink.getDestination().getHexHash());
                 peerLink.teardown();
@@ -162,8 +216,8 @@ public class RNSPeer {
         } else if (msgText.startsWith("open::")) {
             var targetPeerHash = subarray(message, 7, message.length);
             log.info("peer dest hash: {}, target hash: {}",
-                Hex.encodeHexString(destinationHash),
-                Hex.encodeHexString(targetPeerHash));
+                encodeHexString(destinationHash),
+                encodeHexString(targetPeerHash));
             if (Arrays.equals(destinationHash, targetPeerHash)) {
                 log.info("closing link: {}", peerLink.getDestination().getHexHash());
                 getOrInitPeerLink();
@@ -172,8 +226,62 @@ public class RNSPeer {
         // TODO: process incoming packet.... 
     }
 
+    /*
+     * Callback from buffer when buffer has data available
+     *
+     * :param readyBytes: The number of bytes ready to read
+     */
+    public void peerBufferReady(Integer readyBytes) {
+        var data = this.peerBuffer.read(readyBytes);
+        var decodedData = new String(data);
+
+        log.info("Received data over the buffer: {}", decodedData);
+
+        //if (isFalse(this.isInitiator)) {
+        //    // TODO: process data and reply
+        //} else {
+        //    this.peerBuffer.flush(); // clear buffer
+        //}
+    }
+
+    /**
+     * Set a packet to remote with the message format "close::<our_destination_hash>"
+     * This method is only useful for non-initiator links to close the remote initiator.
+     *
+     * @param link
+     */
+    public void sendCloseToRemote(Link link) {
+        var baseDestination = RNSNetwork.getInstance().getBaseDestination();
+        if (nonNull(link) & (isFalse(link.isInitiator()))) {
+            // Note: if part of link we need to get the baseDesitination hash
+            //var data = concatArrays("close::".getBytes(UTF_8),link.getDestination().getHash());
+            var data = concatArrays("close::".getBytes(UTF_8), baseDestination.getHash());
+            Packet closePacket = new Packet(link, data);
+            var packetReceipt = closePacket.send();
+            packetReceipt.setDeliveryCallback(this::closePacketDelivered);
+            packetReceipt.setTimeout(1000L);
+            packetReceipt.setTimeoutCallback(this::packetTimedOut);
+        } else {
+            log.debug("can't send to null link");
+        }
+    }
 
     /** PacketReceipt callbacks */
+    public void closePacketDelivered(PacketReceipt receipt) {
+        var rttString = new String("");
+        if (receipt.getStatus() == PacketReceiptStatus.DELIVERED) {
+            var rtt = receipt.getRtt();    // rtt (Java) is in milliseconds
+            if (rtt >= 1000) {
+                rtt = Math.round(rtt / 1000);
+                rttString = String.format("%d seconds", rtt);
+            } else {
+                rttString = String.format("%d miliseconds", rtt);
+            }
+            log.info("Shutdown packet confirmation received from {}, round-trip time is {}",
+                    encodeHexString(receipt.getDestination().getHash()), rttString);
+        }
+    }
+
     public void packetDelivered(PacketReceipt receipt) {
         var rttString = "";
         //log.info("packet delivered callback, receipt: {}", receipt);
@@ -187,7 +295,7 @@ public class RNSPeer {
                 rttString = String.format("%d milliseconds", rtt);
             }
             log.info("Valid reply received from {}, round-trip time is {}",
-                    Hex.encodeHexString(receipt.getDestination().getHash()), rttString);
+                    encodeHexString(receipt.getDestination().getHash()), rttString);
         }
     }
 
@@ -242,7 +350,7 @@ public class RNSPeer {
                 packetReceipt.setDeliveryCallback(this::packetDelivered);
             } else {
                 log.info("can't send ping to a peer {} with (link) status: {}",
-                    Hex.encodeHexString(peerLink.getDestination().getHash()), peerLink.getStatus());
+                    encodeHexString(peerLink.getDestination().getHash()), peerLink.getStatus());
             }
         }
     }
