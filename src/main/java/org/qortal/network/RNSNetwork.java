@@ -68,11 +68,13 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 //import java.util.concurrent.locks.Lock;
 //import java.util.concurrent.locks.ReentrantLock;
+import java.util.Objects;
 
 import org.apache.commons.codec.binary.Hex;
 import org.qortal.utils.ExecuteProduceConsume;
-import org.qortal.utils.NamedThreadFactory;
 import org.qortal.utils.ExecuteProduceConsume.StatsSnapshot;
+import org.qortal.utils.NTP;
+import org.qortal.utils.NamedThreadFactory;
 
 // logging
 import lombok.extern.slf4j.Slf4j;
@@ -97,13 +99,20 @@ public class RNSNetwork {
     Identity serverIdentity;
     public Destination baseDestination;
     private volatile boolean isShuttingDown = false;
+
+    /**
+     * Maintain two lists for each subset of peers
+     *  => a synchronizedList, modified when peers are added/removed
+     *  => an immutable List, automatically rebuild to mirror synchronizedList, served to consumers
+     *  linkedPeers are "initiators" (containing initiator reticulum Link), actively doing work.
+     *  incomimgPeers are "non-initiators", the passive end of bidirectional Reticulum Buffers.
+     */
     private final List<RNSPeer> linkedPeers = Collections.synchronizedList(new ArrayList<>());
     private List<RNSPeer> immutableLinkedPeers = Collections.emptyList();
-    //private final List<Link> incomingLinks = Collections.synchronizedList(new ArrayList<>());
     private final List<RNSPeer> incomingPeers = Collections.synchronizedList(new ArrayList<>());
     private List<RNSPeer> immutableIncomingPeers = Collections.emptyList();
 
-    //private final ExecuteProduceConsume rnsNetworkEPC;
+    private final ExecuteProduceConsume rnsNetworkEPC;
     private static final long NETWORK_EPC_KEEPALIVE = 1000L; // 1 second
     //private volatile boolean isShuttingDown = false;
     private int totalThreadCount = 0;
@@ -135,13 +144,13 @@ public class RNSNetwork {
         log.info("reticulum instance created");
         log.info("reticulum instance created: {}", reticulum);
 
-        ////        Settings.getInstance().getMaxRNSNetworkThreadPoolSize(),   // statically set to 5 below
-        //ExecutorService RNSNetworkExecutor = new ThreadPoolExecutor(1,
-        //        5,
-        //        NETWORK_EPC_KEEPALIVE, TimeUnit.SECONDS,
-        //        new SynchronousQueue<Runnable>(),
-        //        new NamedThreadFactory("RNSNetwork-EPC", Settings.getInstance().getNetworkThreadPriority()));
-        //rnsNetworkEPC = new RNSNetworkProcessor(RNSNetworkExecutor);
+        //        Settings.getInstance().getMaxRNSNetworkThreadPoolSize(),   // statically set to 5 below
+        ExecutorService RNSNetworkExecutor = new ThreadPoolExecutor(1,
+                5,
+                NETWORK_EPC_KEEPALIVE, TimeUnit.SECONDS,
+                new SynchronousQueue<Runnable>(),
+                new NamedThreadFactory("RNSNetwork-EPC", Settings.getInstance().getNetworkThreadPriority()));
+        rnsNetworkEPC = new RNSNetworkProcessor(RNSNetworkExecutor);
     }
 
     // Note: potentially create persistent serverIdentity (utility rnid) and load it from file
@@ -198,10 +207,8 @@ public class RNSNetwork {
         baseDestination.announce();
         log.debug("Sent initial announce from {} ({})", Hex.encodeHexString(baseDestination.getHash()), baseDestination.getName());
 
-        log.info("check point 1");
-        // Start up first networking thread (the "server loop")
-        //rnsNetworkEPC.start();
-        log.info("check point 2");
+        // Start up first networking thread (the "server loop", JS: the "Tasks engine")
+        rnsNetworkEPC.start();
     }
 
     private void initConfig(String configDir) throws IOException {
@@ -232,14 +239,6 @@ public class RNSNetwork {
                 p.sendCloseToRemote(pl);
             }
         }
-        //// Stop processing threads (the "server loop")
-        //try {
-        //    if (!this.rnsNetworkEPC.shutdown(5000)) {
-        //        log.warn("RNSNetwork threads failed to terminate");
-        //    }
-        //} catch (InterruptedException e) {
-        //    log.warn("Interrupted while waiting for RNS networking threads to terminate");
-        //}
         // Disconnect peers gracefully and terminate Reticulum
         for (RNSPeer p: linkedPeers) {
             log.info("shutting down peer: {}", Hex.encodeHexString(p.getDestinationHash()));
@@ -250,6 +249,14 @@ public class RNSNetwork {
             } catch (InterruptedException e) {
                 log.error("exception: ", e);
             }
+        }
+        // Stop processing threads (the "server loop")
+        try {
+            if (!this.rnsNetworkEPC.shutdown(5000)) {
+                log.warn("RNSNetwork threads failed to terminate");
+            }
+        } catch (InterruptedException e) {
+            log.warn("Interrupted while waiting for RNS networking threads to terminate");
         }
         // Note: we still need to get the packet timeout callback to work...
         reticulum.exitHandler();
@@ -340,8 +347,6 @@ public class RNSNetwork {
                 }
             }
             if (activePeerCount < MAX_PEERS) {
-                //if (!peerExists) { 
-                //var peer = findPeerByDestinationHash(destinationHash);
                 for (RNSPeer p: lps) {
                     if (Arrays.equals(p.getDestinationHash(), destinationHash)) {
                         log.info("QAnnounceHandler - peer exists - found peer matching destinationHash");
@@ -365,12 +370,10 @@ public class RNSNetwork {
                     RNSPeer newPeer = new RNSPeer(destinationHash);
                     newPeer.setServerIdentity(announcedIdentity);
                     newPeer.setIsInitiator(true);
-                    //lps.add(newPeer);
                     addLinkedPeer(newPeer);
                     log.info("added new RNSPeer, destinationHash: {}", Hex.encodeHexString(destinationHash));
                 }
             }
-            //}
         }
     }
 
@@ -402,31 +405,68 @@ public class RNSNetwork {
             //if (task != null) {
             //    return task;
             //}
-            //
-            //final Long now = NTP.getTime();
-            //
-            //task = maybeProducePeerPingTask(now);
-            //if (task != null) {
-            //    return task;
-            //}
-            //
-            //task = maybeProduceConnectPeerTask(now);
-            //if (task != null) {
-            //    return task;
-            //}
-            //
+            
+            final Long now = NTP.getTime();
+            
+            task = maybeProducePeerPingTask(now);
+            if (task != null) {
+                return task;
+            }
+            
             //task = maybeProduceBroadcastTask(now);
             //if (task != null) {
             //    return task;
             //}
-            //
-            // Only this method can block to reduce CPU spin
-            //return maybeProduceChannelTask(canBlock);
-
-            // TODO: flesh out the tasks handled by Reticulum
             return null;
         }
-        //...TODO: implement abstract methods...
+
+        //private Task maybeProducePeerMessageTask() {
+        //    return getImmutableConnectedPeers().stream()
+        //            .map(Peer::getMessageTask)
+        //            .filter(Objects::nonNull)
+        //            .findFirst()
+        //            .orElse(null);
+        //}
+        //private Task maybeProducePeerMessageTask() {
+        //    return getImmutableIncommingPeers().stream()
+        //            .map(RNSPeer::getMessageTask)
+        //            .filter(RNSPeer::isAvailable)
+        //            .findFirst*()
+        //            .orElse(null);
+        //}
+
+        //private Task maybeProducePeerPingTask(Long now) {
+        //    return getImmutableHandshakedPeers().stream()
+        //            .map(peer -> peer.getPingTask(now))
+        //            .filter(Objects::nonNull)
+        //            .findFirst()
+        //            .orElse(null);
+        //}
+        private Task maybeProducePeerPingTask(Long now) {
+            var ilp = getImmutableLinkedPeers().stream()
+                    .map(peer -> peer.getPingTask(now))
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+            if (nonNull(ilp)) {
+                log.info("ilp - {}", ilp);
+            }
+            return ilp;
+            //return getImmutableLinkedPeers().stream()
+            //        .map(peer -> peer.getPingTask(now))
+            //        .filter(Objects::nonNull)
+            //        .findFirst()
+            //        .orElse(null);
+        }
+        
+        //private Task maybeProduceBroadcastTask(Long now) {
+        //    if (now == null || now < nextBroadcastTimestamp.get()) {
+        //        return null;
+        //    }
+        //
+        //    nextBroadcastTimestamp.set(now + BROADCAST_INTERVAL);
+        //    return new BroadcastTask();
+        //}
     }
 
     private static class SingletonContainer {
@@ -437,9 +477,9 @@ public class RNSNetwork {
         return SingletonContainer.INSTANCE;
     }
 
-    //public List<RNSPeer> getImmutableLinkedPeers() {
-    //    return this.immutableLinkedPeers;
-    //}
+    public List<RNSPeer> getImmutableLinkedPeers() {
+        return this.immutableLinkedPeers;
+    }
 
     public void addLinkedPeer(RNSPeer peer) {
         this.linkedPeers.add(peer);
@@ -461,7 +501,12 @@ public class RNSNetwork {
         //}
     }
 
-    public void removeIncommingPeer(RNSPeer peer) {
+    public void addIncomingPeer(RNSPeer peer) {
+        this.incomingPeers.add(peer);
+        this.immutableIncomingPeers = List.copyOf(this.incomingPeers);
+    }
+
+    public void removeIncomingPeer(RNSPeer peer) {
         if (nonNull(peer.getPeerLink())) {
             peer.getPeerLink().teardown();
         }
@@ -530,7 +575,8 @@ public class RNSNetwork {
             }
         }
         //removeExpiredPeers(this.linkedPeers);
-        log.info("number of links (linkedPeers) after prunig: {}", peerList.size());
+        log.info("number of links (linkedPeers / incomingPeers) after prunig: {}, {}", peerList.size(),
+                getIncomingPeers().size());
         //log.info("we have {} non-initiator links, list: {}", incomingLinks.size(), incomingLinks);
         var activePeerCount = 0;
         var lps =  RNSNetwork.getInstance().getLinkedPeers();

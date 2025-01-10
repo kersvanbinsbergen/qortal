@@ -34,9 +34,25 @@ import io.reticulum.buffer.Buffer;
 import io.reticulum.buffer.BufferedRWPair;
 import static io.reticulum.utils.IdentityUtils.concatArrays;
 
+import org.qortal.controller.Controller;
+import org.qortal.data.block.BlockSummaryData;
+import org.qortal.data.block.CommonBlockData;
+import org.qortal.network.message.Message;
+import org.qortal.network.message.PingMessage;
+import org.qortal.network.message.*;
+import org.qortal.network.message.MessageException;
+import org.qortal.network.task.RNSMessageTask;
+import org.qortal.network.task.RNSPingTask;
 import org.qortal.settings.Settings;
+import org.qortal.utils.ExecuteProduceConsume.Task;
+import org.qortal.utils.NTP;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.*;
+
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.commons.codec.binary.Hex.encodeHexString;
 import static org.apache.commons.lang3.ArrayUtils.subarray;
@@ -47,6 +63,14 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.Setter;
 import lombok.Data;
 import lombok.AccessLevel;
+//
+//import org.qortal.network.message.Message;
+//import org.qortal.network.message.MessageException;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import java.lang.IllegalStateException;
 
 @Data
 @Slf4j
@@ -69,9 +93,21 @@ public class RNSPeer {
     private Boolean isInitiator;
     private Boolean deleteMe = false;
     private Boolean isVacant = true;
+    private Long lastPacketRtt = null;
 
     private Double requestResponseProgress;
     @Setter(AccessLevel.PACKAGE) private Boolean peerTimedOut = false;
+
+    // for qortal networking
+    private static final int RESPONSE_TIMEOUT = 3000; // [ms]
+    private static final int PING_INTERVAL = 34_000; // [ms]
+    private Long lastPing = null;      // last ping roundtrip time [ms]
+    private Long lastPingSent = null;  // time last ping was sent, or null if not started.
+    private Map<Integer, BlockingQueue<Message>> replyQueues;
+    //private LinkedBlockingQueue<Message> pendingMessages;    // we might not need this
+    // Versioning
+    public static final Pattern VERSION_PATTERN = Pattern.compile(Controller.VERSION_PREFIX
+            + "(\\d{1,3})\\.(\\d{1,5})\\.(\\d{1,5})");
 
     /**
      * Constructor for initiator peers
@@ -83,6 +119,7 @@ public class RNSPeer {
         //setCreationTimestamp(System.currentTimeMillis());
         this.creationTimestamp = Instant.now();
         this.isVacant = true;
+        this.replyQueues = new ConcurrentHashMap<>();
     }
 
     /**
@@ -129,9 +166,17 @@ public class RNSPeer {
         var channel = this.peerLink.getChannel();
         if (nonNull(this.peerBuffer)) {
             log.info("peerBuffer exists: {}, link status: {}", this.peerBuffer, this.peerLink.getStatus());
-            this.peerBuffer.close();
-            this.peerBuffer = Buffer.createBidirectionalBuffer(receiveStreamId, sendStreamId, channel, this::peerBufferReady);
-            //return this.peerBuffer;
+            try {
+                this.peerBuffer.close();
+                this.peerBuffer = Buffer.createBidirectionalBuffer(receiveStreamId, sendStreamId, channel, this::peerBufferReady);
+            } catch (IllegalStateException e) {
+                // Exception thrown by Reticulum BufferedRWPair.close()
+                // This is a chance to correct links status when doing a RNSPingTask
+                log.warn("can't establish Channel/Buffer (remote peer down?), closing link: {}");
+                this.peerLink.teardown();
+                this.peerLink = null;
+                //log.error("(handled) IllegalStateException - can't establish Channel/Buffer: {}", e);
+            }
         }
         else {
             log.info("creating buffer - peerLink status: {}, channel: {}", this.peerLink.getStatus(), channel);
@@ -181,6 +226,9 @@ public class RNSPeer {
         log.info("peerLink {} established (link: {}) with peer: hash - {}, link destination hash: {}", 
             peerLink, link, encodeHexString(destinationHash),
             encodeHexString(link.getDestination().getHash()));
+        if (isInitiator) {
+            startPings();
+        }
     }
     
     public void linkClosed(Link link) {
@@ -232,10 +280,43 @@ public class RNSPeer {
      * :param readyBytes: The number of bytes ready to read
      */
     public void peerBufferReady(Integer readyBytes) {
+        // get the message data
         var data = this.peerBuffer.read(readyBytes);
-        var decodedData = new String(data);
 
-        log.info("Received data over the buffer: {}", decodedData);
+        try {
+            Message message = Message.fromByteBuffer(ByteBuffer.wrap(data));
+            log.info("type {} message received: {}", message.getType(), message);
+            // TODO: Now what with message?
+            switch (message.getType()) {
+                //case GET_PEERS:
+                //    onGetPeersMessage(peer, message);
+                //    break;
+                
+                case PING:
+                    //onPingMessage(this, message);
+                    PongMessage pongMessage = new PongMessage();
+                    pongMessage.setId(message.getId());
+                    //var peerBuffer = getOrInitPeerBuffer();
+                    this.peerBuffer.write(message.toBytes());
+                    this.peerBuffer.flush();
+                    break;
+
+                case PONG:
+
+                //case PEERS_V2:
+                //    onPeersV2Message(peer, message);
+                //    break;
+                //
+                //default:
+                //    // Bump up to controller for possible action
+                //    Controller.getInstance().onNetworkMessage(peer, message);
+                //    break;
+            }
+        } catch (MessageException e) {
+            log.error("{} from peer {}", e.getMessage(), this);
+        }
+        //var decodedData = new String(data);
+        //log.info("Received data over the buffer: {}", decodedData);
 
         //if (isFalse(this.isInitiator)) {
         //    // TODO: process data and reply
@@ -271,6 +352,7 @@ public class RNSPeer {
         var rttString = new String("");
         if (receipt.getStatus() == PacketReceiptStatus.DELIVERED) {
             var rtt = receipt.getRtt();    // rtt (Java) is in milliseconds
+            this.lastPacketRtt = rtt;
             if (rtt >= 1000) {
                 rtt = Math.round(rtt / 1000);
                 rttString = String.format("%d seconds", rtt);
@@ -287,6 +369,7 @@ public class RNSPeer {
         //log.info("packet delivered callback, receipt: {}", receipt);
         if (receipt.getStatus() == PacketReceiptStatus.DELIVERED) {
             var rtt = receipt.getRtt();    // rtt (Java) is in milliseconds
+            this.lastPacketRtt = rtt;
             //log.info("qqp - packetDelivered - rtt: {}", rtt);
             if (rtt >= 1000) {
                 rtt = Math.round((float) rtt / 1000);
@@ -334,6 +417,19 @@ public class RNSPeer {
         log.debug("Resource transfer complete");
     }
 
+    ///**
+    // * Send a message using the peer buffer
+    // */
+    //public Message getResponse(Message message) throws InterruptedException {
+    //    var peerBuffer = getOrInitPeerBuffer();
+    //
+    //    //// send message
+    //    //peerBuffer.write(...);
+    //    //peerBuffer.flush();
+    //
+    //    // receive - peerBufferReady callback result
+    //}
+
     /** Utility methods */
     public void pingRemote() {
         var link = this.peerLink;
@@ -364,30 +460,121 @@ public class RNSPeer {
     //    packetReceipt.setDeliveryCallback(this::shutdownPacketDelivered);
     //}
 
-    ///** check if a link is available (ACTIVE)
-    // *  link: a certain peer link, or null (default link == link to Qortal node RNS baseDestination)
-    // */
-    //public Boolean peerLinkIsAlive(Link link) {
-    //    var result = false;
-    //    if (isNull(link)) {
-    //        // default link
-    //        var defaultLink = getLink();
-    //        if (nonNull(defaultLink) && defaultLink.getStatus() == ACTIVE) {
-    //            result = true;
-    //            log.info("Default link is available");
-    //        } else {
-    //            log.info("Default link {} is not available, status: {}", defaultLink, defaultLink.getStatus());
-    //        } 
-    //    } else {
-    //        // other link (future where we have multiple destinations...)
-    //        if (link.getStatus() == ACTIVE) {
-    //            result = true;
-    //            log.info("Link {} is available (status: {})", link, link.getStatus());
-    //        } else {
-    //            log.info("Link {} is not available, status: {}", link, link.getStatus());
-    //        }
-    //    }
-    //    return result;
+    /** qortal networking specific (Tasks) */
+
+    //private void onPingMessage(RNSPeer peer, Message message) {
+    //    PingMessage pingMessage = (PingMessage) message;
+    //
+    //    // Generate 'pong' using same ID
+    //    PingMessage pongMessage = new PingMessage();
+    //    pongMessage.setId(pingMessage.getId());
+    //
+    //    sendMessageWithTimeout(pongMessage, RESPONSE_TIMEOUT);
     //}
-    
+
+    /**
+     * Send message to peer and await response, using default RESPONSE_TIMEOUT.
+     * <p>
+     * Message is assigned a random ID and sent.
+     * Responses are handled by registered callbacks.
+     * <p>
+     * Note: The method is called "get..." to match the original method name
+     *
+     * @param message message to send
+     * @return <code>Message</code> if valid response received; <code>null</code> if not or error/exception occurs
+     * @throws InterruptedException if interrupted while waiting
+     */
+    public void getResponse(Message message) throws InterruptedException {
+        getResponseWithTimeout(message, RESPONSE_TIMEOUT);
+    }
+
+    /**
+     * Send message to peer and await response.
+     * <p>
+     * Message is assigned a random ID and sent.
+     * If a response with matching ID is received then it is returned to caller.
+     * <p>
+     * If no response with matching ID within timeout, or some other error/exception occurs,
+     * then return <code>null</code>.<br>
+     * (Assume peer will be rapidly disconnected after this).
+     *
+     * @param message message to send
+     * @return <code>Message</code> if valid response received; <code>null</code> if not or error/exception occurs
+     * @throws InterruptedException if interrupted while waiting
+     */
+    public void getResponseWithTimeout(Message message, int timeout) throws InterruptedException {
+        BlockingQueue<Message> blockingQueue = new ArrayBlockingQueue<>(1);
+        // TODO: implement equivalent of Peer class...
+        // Assign random ID to this message
+        Random random = new Random();
+        int id;
+        do {
+            id = random.nextInt(Integer.MAX_VALUE - 1) + 1;
+
+            // Put queue into map (keyed by message ID) so we can poll for a response
+            // If putIfAbsent() doesn't return null, then this ID is already taken
+        } while (this.replyQueues.putIfAbsent(id, blockingQueue) != null);
+        message.setId(id);
+
+        // Try to send message
+        if (!this.sendMessageWithTimeout(message, timeout)) {
+            this.replyQueues.remove(id);
+            return;
+        }
+
+        try {
+            blockingQueue.poll(timeout, TimeUnit.MILLISECONDS);
+        } finally {
+            this.replyQueues.remove(id);
+        }
+    }
+
+    /**
+     * Attempt to send Message to peer using the buffer and a custom timeout.
+     *
+     * @param message message to be sent
+     * @return <code>true</code> if message successfully sent; <code>false</code> otherwise
+     */
+    public boolean sendMessageWithTimeout(Message message, int timeout) {
+        try {
+            log.trace("Sending {} message with ID {} to peer {}", message.getType().name(), message.getId(), this);
+            var peerBuffer = getOrInitPeerBuffer();
+            peerBuffer.write(message.toBytes());
+            peerBuffer.flush();
+            return true;
+        //} catch (InterruptedException e) {
+        //    // Send failure
+        //    return false;
+        } catch (IllegalStateException e) {
+            //log.warn("Can't write to buffer (remote buffer down?)");
+            log.error("IllegalStateException - can't write to buffer: e", e);
+            return false;
+        } catch (MessageException e) {
+            log.error(e.getMessage(), e);
+            return false;
+        }
+    }
+
+    protected void startPings() {
+        log.trace("[{}] Enabling pings for peer {}",
+                peerLink.getDestination().getHexHash(), this);
+        this.lastPingSent = NTP.getTime();
+    }
+
+    protected Task getPingTask(Long now) {
+        // Pings not enabled yet?
+        if (now == null || this.lastPingSent == null) {
+            return null;
+        }
+
+        // Time to send another ping?
+        if (now < this.lastPingSent + PING_INTERVAL) {
+            return null; // Not yet
+        }
+
+        // Not strictly true, but prevents this peer from being immediately chosen again
+        this.lastPingSent = now;
+
+        return new RNSPingTask(this, now);
+    }
 }
