@@ -300,6 +300,7 @@ public class RNSNetwork {
         log.info("clientConnected - link hash: {}, {}", link.getHash(), Hex.encodeHexString(link.getHash()));
         RNSPeer newPeer = new RNSPeer(link);
         newPeer.setPeerLinkHash(link.getHash());
+        newPeer.setMessageMagic(getMessageMagic());
         // make sure the peer has a channel and buffer
         newPeer.getOrInitPeerBuffer();
         incomingPeers.add(newPeer);
@@ -370,6 +371,7 @@ public class RNSNetwork {
                     RNSPeer newPeer = new RNSPeer(destinationHash);
                     newPeer.setServerIdentity(announcedIdentity);
                     newPeer.setIsInitiator(true);
+                    newPeer.setMessageMagic(getMessageMagic());
                     addLinkedPeer(newPeer);
                     log.info("added new RNSPeer, destinationHash: {}", Hex.encodeHexString(destinationHash));
                 }

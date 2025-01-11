@@ -52,6 +52,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.*;
+import java.util.Arrays;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.commons.codec.binary.Hex.encodeHexString;
@@ -101,6 +102,7 @@ public class RNSPeer {
     // for qortal networking
     private static final int RESPONSE_TIMEOUT = 3000; // [ms]
     private static final int PING_INTERVAL = 34_000; // [ms]
+    private byte[] messageMagic;  // set in creating classes
     private Long lastPing = null;      // last ping roundtrip time [ms]
     private Long lastPingSent = null;  // time last ping was sent, or null if not started.
     private Map<Integer, BlockingQueue<Message>> replyQueues;
@@ -166,17 +168,18 @@ public class RNSPeer {
         var channel = this.peerLink.getChannel();
         if (nonNull(this.peerBuffer)) {
             log.info("peerBuffer exists: {}, link status: {}", this.peerBuffer, this.peerLink.getStatus());
-            try {
-                this.peerBuffer.close();
-                this.peerBuffer = Buffer.createBidirectionalBuffer(receiveStreamId, sendStreamId, channel, this::peerBufferReady);
-            } catch (IllegalStateException e) {
-                // Exception thrown by Reticulum BufferedRWPair.close()
-                // This is a chance to correct links status when doing a RNSPingTask
-                log.warn("can't establish Channel/Buffer (remote peer down?), closing link: {}");
-                this.peerLink.teardown();
-                this.peerLink = null;
-                //log.error("(handled) IllegalStateException - can't establish Channel/Buffer: {}", e);
-            }
+            return this.peerBuffer;
+            //try {
+            //    this.peerBuffer.close();
+            //    this.peerBuffer = Buffer.createBidirectionalBuffer(receiveStreamId, sendStreamId, channel, this::peerBufferReady);
+            //} catch (IllegalStateException e) {
+            //    // Exception thrown by Reticulum BufferedRWPair.close()
+            //    // This is a chance to correct links status when doing a RNSPingTask
+            //    log.warn("can't establish Channel/Buffer (remote peer down?), closing link: {}");
+            //    this.peerLink.teardown();
+            //    this.peerLink = null;
+            //    //log.error("(handled) IllegalStateException - can't establish Channel/Buffer: {}", e);
+            //}
         }
         else {
             log.info("creating buffer - peerLink status: {}, channel: {}", this.peerLink.getStatus(), channel);
@@ -282,6 +285,8 @@ public class RNSPeer {
     public void peerBufferReady(Integer readyBytes) {
         // get the message data
         var data = this.peerBuffer.read(readyBytes);
+        //var pureData = Arrays.copyOfRange(data, this.messageMagic.length - 1, data.length);
+        log.trace("peerBufferReady - data bytes: {}", data.length);
 
         try {
             Message message = Message.fromByteBuffer(ByteBuffer.wrap(data));
@@ -293,15 +298,17 @@ public class RNSPeer {
                 //    break;
                 
                 case PING:
+                    //log.info("sending PING response");
                     //onPingMessage(this, message);
                     PongMessage pongMessage = new PongMessage();
                     pongMessage.setId(message.getId());
-                    //var peerBuffer = getOrInitPeerBuffer();
-                    this.peerBuffer.write(message.toBytes());
+                    this.peerBuffer.write(pongMessage.toBytes());
                     this.peerBuffer.flush();
                     break;
 
                 case PONG:
+                    //log.info("PONG received");
+                    //break;
 
                 //case PEERS_V2:
                 //    onPeersV2Message(peer, message);
@@ -313,7 +320,8 @@ public class RNSPeer {
                 //    break;
             }
         } catch (MessageException e) {
-            log.error("{} from peer {}", e.getMessage(), this);
+            //log.error("{} from peer {}", e.getMessage(), this);
+            log.error("{} from peer {}", e, this);
         }
         //var decodedData = new String(data);
         //log.info("Received data over the buffer: {}", decodedData);
@@ -539,8 +547,8 @@ public class RNSPeer {
         try {
             log.trace("Sending {} message with ID {} to peer {}", message.getType().name(), message.getId(), this);
             var peerBuffer = getOrInitPeerBuffer();
-            peerBuffer.write(message.toBytes());
-            peerBuffer.flush();
+            this.peerBuffer.write(message.toBytes());
+            this.peerBuffer.flush();
             return true;
         //} catch (InterruptedException e) {
         //    // Send failure
