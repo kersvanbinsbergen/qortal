@@ -445,20 +445,20 @@ public class RNSNetwork {
         //            .orElse(null);
         //}
         private Task maybeProducePeerPingTask(Long now) {
-            var ilp = getImmutableLinkedPeers().stream()
-                    .map(peer -> peer.getPingTask(now))
-                    .filter(Objects::nonNull)
-                    .findFirst()
-                    .orElse(null);
-            if (nonNull(ilp)) {
-                log.info("ilp - {}", ilp);
-            }
-            return ilp;
-            //return getImmutableLinkedPeers().stream()
+            //var ilp = getImmutableLinkedPeers().stream()
             //        .map(peer -> peer.getPingTask(now))
             //        .filter(Objects::nonNull)
             //        .findFirst()
             //        .orElse(null);
+            //if (nonNull(ilp)) {
+            //    log.info("ilp - {}", ilp);
+            //}
+            //return ilp;
+            return getImmutableLinkedPeers().stream()
+                    .map(peer -> peer.getPingTask(now))
+                    .filter(Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
         }
         
         //private Task maybeProduceBroadcastTask(Long now) {
@@ -594,7 +594,7 @@ public class RNSNetwork {
                 activePeerCount = activePeerCount + 1;
             }
         }
-        log.info("we have {} active peers", activePeerCount);
+        log.info("we have {} active peers (linkedPeers)", activePeerCount);
         maybeAnnounce(getBaseDestination());
     }
 

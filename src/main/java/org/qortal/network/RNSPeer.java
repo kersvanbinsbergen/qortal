@@ -167,7 +167,7 @@ public class RNSPeer {
     public BufferedRWPair getOrInitPeerBuffer() {
         var channel = this.peerLink.getChannel();
         if (nonNull(this.peerBuffer)) {
-            log.info("peerBuffer exists: {}, link status: {}", this.peerBuffer, this.peerLink.getStatus());
+            log.trace("peerBuffer exists: {}, link status: {}", this.peerBuffer, this.peerLink.getStatus());
             return this.peerBuffer;
             //try {
             //    this.peerBuffer.close();
@@ -298,12 +298,11 @@ public class RNSPeer {
                 //    break;
                 
                 case PING:
-                    //log.info("sending PING response");
-                    //onPingMessage(this, message);
-                    PongMessage pongMessage = new PongMessage();
-                    pongMessage.setId(message.getId());
-                    this.peerBuffer.write(pongMessage.toBytes());
-                    this.peerBuffer.flush();
+                    onPingMessage(this, message);
+                    //PongMessage pongMessage = new PongMessage();
+                    //pongMessage.setId(message.getId());
+                    //this.peerBuffer.write(pongMessage.toBytes());
+                    //this.peerBuffer.flush();
                     break;
 
                 case PONG:
@@ -470,15 +469,19 @@ public class RNSPeer {
 
     /** qortal networking specific (Tasks) */
 
-    //private void onPingMessage(RNSPeer peer, Message message) {
-    //    PingMessage pingMessage = (PingMessage) message;
-    //
-    //    // Generate 'pong' using same ID
-    //    PingMessage pongMessage = new PingMessage();
-    //    pongMessage.setId(pingMessage.getId());
-    //
-    //    sendMessageWithTimeout(pongMessage, RESPONSE_TIMEOUT);
-    //}
+    private void onPingMessage(RNSPeer peer, Message message) {
+        PingMessage pingMessage = (PingMessage) message;
+    
+        try {
+            PongMessage pongMessage = new PongMessage();
+            pongMessage.setId(message.getId());  // use the ping message id
+            this.peerBuffer.write(pongMessage.toBytes());
+            this.peerBuffer.flush();
+        } catch (MessageException e) {
+            //log.error("{} from peer {}", e.getMessage(), this);
+            log.error("{} from peer {}", e, this);
+        }
+    }
 
     /**
      * Send message to peer and await response, using default RESPONSE_TIMEOUT.
@@ -493,6 +496,7 @@ public class RNSPeer {
      * @throws InterruptedException if interrupted while waiting
      */
     public void getResponse(Message message) throws InterruptedException {
+        log.info("RNSPingTask action - pinging peer {}", encodeHexString(getDestinationHash()));
         getResponseWithTimeout(message, RESPONSE_TIMEOUT);
     }
 

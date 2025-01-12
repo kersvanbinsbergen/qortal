@@ -47,16 +47,7 @@ public class RNSPingTask implements Task {
         //}
         peer.getResponse(pingMessage);
 
-        //Message message = peer.getResponse(pingMessage);
-        //
-        //if (message == null || message.getType() != MessageType.PING) {
-        //    LOGGER.debug("[{}] Didn't receive reply from {} for PING ID {}",
-        //            peer.getPeerConnectionId(), peer, pingMessage.getId());
-        //    peer.disconnect("no ping received");
-        //    return;
-        //}
-
-        //// tast is not over here.
+        //// task is not over here.
         //peer.setLastPing(NTP.getTime() - now);
     }
 }
