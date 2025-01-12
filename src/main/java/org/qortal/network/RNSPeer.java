@@ -559,7 +559,9 @@ public class RNSPeer {
         //    return false;
         } catch (IllegalStateException e) {
             //log.warn("Can't write to buffer (remote buffer down?)");
-            log.error("IllegalStateException - can't write to buffer: e", e);
+            this.peerLink.teardown();
+            this.peerBuffer = null;
+            log.error("IllegalStateException - can't write to buffer: {}", e);
             return false;
         } catch (MessageException e) {
             log.error(e.getMessage(), e);
@@ -576,6 +578,15 @@ public class RNSPeer {
     protected Task getPingTask(Long now) {
         // Pings not enabled yet?
         if (now == null || this.lastPingSent == null) {
+            return null;
+        }
+
+        // ping only possible over ACTIVE Link
+        if (nonNull(this.peerLink)) {
+            if (this.peerLink.getStatus() != ACTIVE) {
+                return null;
+            }
+        } else {
             return null;
         }
 

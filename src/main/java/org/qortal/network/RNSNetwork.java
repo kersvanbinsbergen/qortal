@@ -520,6 +520,10 @@ public class RNSNetwork {
          return this.incomingPeers;
     }
 
+    public List<RNSPeer> getImmutableIncomingPeers() {
+        return this.immutableIncomingPeers;
+    }
+
     // TODO, methods for: getAvailablePeer
 
     // maintenance
@@ -542,8 +546,8 @@ public class RNSNetwork {
     //@Synchronized
     public void prunePeers() throws DataException {
         // run periodically (by the Controller)
-        //List<Link> linkList = getLinkedPeers();
-        var peerList = getLinkedPeers();
+        //var peerList = getLinkedPeers();
+        var peerList = getImmutableLinkedPeers();
         log.info("number of links (linkedPeers) before pruning: {}", peerList.size());
         Link pLink;
         LinkStatus lStatus;
@@ -576,13 +580,32 @@ public class RNSNetwork {
                 removeLinkedPeer(p);
             }
         }
+        //var incomingPeerList = getImmutableIncomingPeers();
+        var incomingPeerList = getIncomingPeers();
+        for (RNSPeer ip: incomingPeerList) {
+            pLink = ip.getPeerLink();
+            //log.info("prunePeers - {} incoming peer: {}", pLink.getStatus(), ip);
+            if (nonNull(pLink)) {
+                if (pLink.getStatus() != ACTIVE) {
+                    log.info("removing inactive incoming/non-initiator peer.");
+                    removeIncomingPeer(ip);
+                } else {
+                    log.info("prunePeers - {} incoming/non-initiator peer: {}", pLink.getStatus(), pLink);
+                }
+            }
+            else {
+                log.info("prunePeers - null incoming/non-initiator peer: {}", ip);
+                //removeIncomingPeer(ip);
+            }
+        }
         //removeExpiredPeers(this.linkedPeers);
         log.info("number of links (linkedPeers / incomingPeers) after prunig: {}, {}", peerList.size(),
-                getIncomingPeers().size());
+                incomingPeerList.size());
         //log.info("we have {} non-initiator links, list: {}", incomingLinks.size(), incomingLinks);
         var activePeerCount = 0;
-        var lps =  RNSNetwork.getInstance().getLinkedPeers();
-        for (RNSPeer p: lps) {
+        //var lps =  RNSNetwork.getInstance().getLinkedPeers();
+        var ips = getImmutableLinkedPeers();
+        for (RNSPeer p: ips) {
             pLink = p.getPeerLink();
             p.pingRemote();
             try {
