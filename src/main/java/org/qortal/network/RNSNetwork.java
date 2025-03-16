@@ -69,12 +69,24 @@ import java.util.concurrent.atomic.AtomicLong;
 //import java.util.concurrent.locks.Lock;
 //import java.util.concurrent.locks.ReentrantLock;
 import java.util.Objects;
+import java.util.function.Function;
 
 import org.apache.commons.codec.binary.Hex;
 import org.qortal.utils.ExecuteProduceConsume;
 import org.qortal.utils.ExecuteProduceConsume.StatsSnapshot;
 import org.qortal.utils.NTP;
 import org.qortal.utils.NamedThreadFactory;
+import org.qortal.network.message.Message;
+import org.qortal.network.message.BlockSummariesV2Message;
+import org.qortal.network.message.TransactionSignaturesMessage;
+import org.qortal.network.message.GetUnconfirmedTransactionsMessage;
+import org.qortal.network.task.RNSBroadcastTask;
+import org.qortal.controller.Controller;
+import org.qortal.repository.Repository;
+import org.qortal.repository.RepositoryManager;
+import org.qortal.data.block.BlockData;
+import org.qortal.data.block.BlockSummaryData;
+import org.qortal.data.transaction.TransactionData;
 
 // logging
 import lombok.extern.slf4j.Slf4j;
@@ -90,12 +102,8 @@ public class RNSNetwork {
     static final String APP_NAME = Settings.getInstance().isTestNet() ? RNSCommon.TESTNET_APP_NAME: RNSCommon.MAINNET_APP_NAME;
     //static final String defaultConfigPath = ".reticulum"; // if empty will look in Reticulums default paths
     static final String defaultConfigPath = Settings.getInstance().isTestNet() ? RNSCommon.defaultRNSConfigPathTestnet: RNSCommon.defaultRNSConfigPath;
-    //static final String defaultConfigPath = RNSCommon.defaultRNSConfigPath;
-    //private final String defaultConfigPath = Settings.getInstance().getReticulumDefaultConfigPath();
-    private static Integer MAX_PEERS = 12;
-    //private final Integer MAX_PEERS = Settings.getInstance().getReticulumMaxPeers();
-    private static Integer MIN_DESIRED_PEERS = 3;
-    //private final Integer MIN_DESIRED_PEERS = Settings.getInstance().getReticulumMinDesiredPeers();
+    private final int MAX_PEERS = Settings.getInstance().getReticulumMaxPeers();
+    private final int MIN_DESIRED_PEERS = Settings.getInstance().getReticulumMinDesiredPeers();
     Identity serverIdentity;
     public Destination baseDestination;
     private volatile boolean isShuttingDown = false;
@@ -114,14 +122,18 @@ public class RNSNetwork {
 
     private final ExecuteProduceConsume rnsNetworkEPC;
     private static final long NETWORK_EPC_KEEPALIVE = 1000L; // 1 second
-    //private volatile boolean isShuttingDown = false;
     private int totalThreadCount = 0;
-    // TODO: settings - MaxReticulumPeers, MaxRNSNetworkThreadPoolSize (if needed)
+    private final int reticulumMaxNetworkThreadPoolSize = Settings.getInstance().getReticulumMaxNetworkThreadPoolSize();
 
     // replicating a feature from Network.class needed in for base Message.java,
     // just in case the classic TCP/IP Networking is turned off.
     private static final byte[] MAINNET_MESSAGE_MAGIC = new byte[]{0x51, 0x4f, 0x52, 0x54}; // QORT
     private static final byte[] TESTNET_MESSAGE_MAGIC = new byte[]{0x71, 0x6f, 0x72, 0x54}; // qorT
+    private static final int BROADCAST_CHAIN_TIP_DEPTH = 7; // Just enough to fill a SINGLE TCP packet (~1440 bytes)
+    /**
+     * How long between informational broadcasts to all ACTIVE peers, in milliseconds.
+     */
+    private static final long BROADCAST_INTERVAL = 30 * 1000L; // ms
 
     //private static final Logger logger = LoggerFactory.getLogger(RNSNetwork.class);
     
@@ -146,7 +158,7 @@ public class RNSNetwork {
 
         //        Settings.getInstance().getMaxRNSNetworkThreadPoolSize(),   // statically set to 5 below
         ExecutorService RNSNetworkExecutor = new ThreadPoolExecutor(1,
-                5,
+                reticulumMaxNetworkThreadPoolSize,
                 NETWORK_EPC_KEEPALIVE, TimeUnit.SECONDS,
                 new SynchronousQueue<Runnable>(),
                 new NamedThreadFactory("RNSNetwork-EPC", Settings.getInstance().getNetworkThreadPriority()));
@@ -226,6 +238,44 @@ public class RNSNetwork {
             }
             Files.copy(defaultConfig, configFile, StandardCopyOption.REPLACE_EXISTING);
         }
+    }
+
+    public void broadcast(Function<RNSPeer, Message> peerMessageBuilder) {
+        for (RNSPeer peer : getImmutableLinkedPeers()) {
+            if (this.isShuttingDown)
+                return;
+    
+            Message message = peerMessageBuilder.apply(peer);
+    
+            if (message == null) {
+                continue;
+            }
+    
+            peer.sendMessage(message);
+        }
+    }
+
+    public void broadcastOurChain() {
+        BlockData latestBlockData = Controller.getInstance().getChainTip();
+        int latestHeight = latestBlockData.getHeight();
+
+        try (final Repository repository = RepositoryManager.getRepository()) {
+            List<BlockSummaryData> latestBlockSummaries = repository.getBlockRepository().getBlockSummaries(latestHeight - BROADCAST_CHAIN_TIP_DEPTH, latestHeight);
+            Message latestBlockSummariesMessage = new BlockSummariesV2Message(latestBlockSummaries);
+
+            broadcast(broadcastPeer -> latestBlockSummariesMessage);
+        } catch (DataException e) {
+            log.warn("Couldn't broadcast our chain tip info", e);
+        }
+    }
+
+    public Message buildNewTransactionMessage(RNSPeer peer, TransactionData transactionData) {
+        // In V2 we send out transaction signature only and peers can decide whether to request the full transaction
+        return new TransactionSignaturesMessage(Collections.singletonList(transactionData.getSignature()));
+    }
+
+    public Message buildGetUnconfirmedTransactionsMessage(RNSPeer peer) {
+        return new GetUnconfirmedTransactionsMessage();
     }
 
     public void shutdown() {
@@ -403,6 +453,8 @@ public class RNSNetwork {
         protected Task produceTask(boolean canBlock) throws InterruptedException {
             Task task;
 
+            //// TODO: enable this once we figure out how to add pending messages in RNSPeer
+            ///        (RNSPeer: pendingMessages.offer(message))
             //task = maybeProducePeerMessageTask();
             //if (task != null) {
             //    return task;
@@ -415,10 +467,10 @@ public class RNSNetwork {
                 return task;
             }
             
-            //task = maybeProduceBroadcastTask(now);
-            //if (task != null) {
-            //    return task;
-            //}
+            task = maybeProduceBroadcastTask(now);
+            if (task != null) {
+                return task;
+            }
             return null;
         }
 
@@ -430,12 +482,18 @@ public class RNSNetwork {
         //            .orElse(null);
         //}
         //private Task maybeProducePeerMessageTask() {
-        //    return getImmutableIncommingPeers().stream()
+        //    return getImmutableIncomingPeers().stream()
         //            .map(RNSPeer::getMessageTask)
         //            .filter(RNSPeer::isAvailable)
-        //            .findFirst*()
+        //            .findFirst()
         //            .orElse(null);
         //}
+        private Task maybeProducePeerMessageTask() {
+            return getImmutableIncomingPeers().stream()
+                    .map(RNSPeer::getMessageTask)
+                    .findFirst()
+                    .orElse(null);
+        }
 
         //private Task maybeProducePeerPingTask(Long now) {
         //    return getImmutableHandshakedPeers().stream()
@@ -461,14 +519,14 @@ public class RNSNetwork {
                     .orElse(null);
         }
         
-        //private Task maybeProduceBroadcastTask(Long now) {
-        //    if (now == null || now < nextBroadcastTimestamp.get()) {
-        //        return null;
-        //    }
-        //
-        //    nextBroadcastTimestamp.set(now + BROADCAST_INTERVAL);
-        //    return new BroadcastTask();
-        //}
+        private Task maybeProduceBroadcastTask(Long now) {
+            if (now == null || now < nextBroadcastTimestamp.get()) {
+                return null;
+            }
+        
+            nextBroadcastTimestamp.set(now + BROADCAST_INTERVAL);
+            return new RNSBroadcastTask();
+        }
     }
 
     private static class SingletonContainer {
@@ -517,7 +575,7 @@ public class RNSNetwork {
     }
 
     public List<RNSPeer> getIncomingPeers() {
-         return this.incomingPeers;
+        return this.incomingPeers;
     }
 
     public List<RNSPeer> getImmutableIncomingPeers() {
@@ -711,6 +769,24 @@ public class RNSNetwork {
 
     public byte[] getMessageMagic() {
         return Settings.getInstance().isTestNet() ? TESTNET_MESSAGE_MAGIC : MAINNET_MESSAGE_MAGIC;
+    }
+
+    // Network methods Reticulum implementation
+
+    /** Builds either (legacy) HeightV2Message or (newer) BlockSummariesV2Message, depending on peer version.
+     *
+     *  @return Message, or null if DataException was thrown.
+     */
+    public Message buildHeightOrChainTipInfo(RNSPeer peer) {
+        // peer only used for version check
+        int latestHeight = Controller.getInstance().getChainHeight();
+
+        try (final Repository repository = RepositoryManager.getRepository()) {
+            List<BlockSummaryData> latestBlockSummaries = repository.getBlockRepository().getBlockSummaries(latestHeight - BROADCAST_CHAIN_TIP_DEPTH, latestHeight);
+            return new BlockSummariesV2Message(latestBlockSummaries);
+        } catch (DataException e) {
+            return null;
+        }
     }
 
 }

@@ -577,6 +577,15 @@ public class Settings {
 		}
 	}
 
+	// Related to Reticulum networking
+
+	/** Maximum number of Reticulum peers allowed. */
+	private int reticulumMaxPeers = 55;
+	/** Minimum number of Reticulum peers desired. */
+	private int reticulumMinDesiredPeers = 3;
+	/** Maximum number of task executor network threads */
+	private int reticulumMaxNetworkThreadPoolSize = 89;
+
 	// Constructors
 
 	private Settings() {
@@ -1332,5 +1341,17 @@ public class Settings {
 
 	public boolean isConnectionPoolMonitorEnabled() {
 		return connectionPoolMonitorEnabled;
+	}
+
+	public int getReticulumMaxPeers() {
+		return this.reticulumMaxPeers;
+	}
+
+	public int getReticulumMinDesiredPeers() {
+		return this.reticulumMinDesiredPeers;
+	}
+
+	public int getReticulumMaxNetworkThreadPoolSize() {
+		return this.reticulumMaxNetworkThreadPoolSize;
 	}
 }

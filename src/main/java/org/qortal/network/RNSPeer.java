@@ -8,6 +8,8 @@ import static java.util.Objects.nonNull;
 //import java.io.IOException;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Collections;
 
 //import io.reticulum.Reticulum;
 //import org.qortal.network.RNSNetwork;
@@ -37,6 +39,7 @@ import static io.reticulum.utils.IdentityUtils.concatArrays;
 import org.qortal.controller.Controller;
 import org.qortal.data.block.BlockSummaryData;
 import org.qortal.data.block.CommonBlockData;
+import org.qortal.data.network.RNSPeerData;
 import org.qortal.network.message.Message;
 import org.qortal.network.message.PingMessage;
 import org.qortal.network.message.*;
@@ -106,10 +109,21 @@ public class RNSPeer {
     private Long lastPing = null;      // last ping roundtrip time [ms]
     private Long lastPingSent = null;  // time last ping was sent, or null if not started.
     private Map<Integer, BlockingQueue<Message>> replyQueues;
-    //private LinkedBlockingQueue<Message> pendingMessages;    // we might not need this
+    private LinkedBlockingQueue<Message> pendingMessages;
     // Versioning
     public static final Pattern VERSION_PATTERN = Pattern.compile(Controller.VERSION_PREFIX
             + "(\\d{1,3})\\.(\\d{1,5})\\.(\\d{1,5})");
+
+    private RNSPeerData peerData = null;
+    /**
+     * Latest block info as reported by peer.
+     */
+    private List<BlockSummaryData> peersChainTipData = Collections.emptyList();
+    /**
+     * Our common block with this peer
+     */
+    private CommonBlockData commonBlockData;
+
 
     /**
      * Constructor for initiator peers
@@ -122,6 +136,8 @@ public class RNSPeer {
         this.creationTimestamp = Instant.now();
         this.isVacant = true;
         this.replyQueues = new ConcurrentHashMap<>();
+        this.pendingMessages = new LinkedBlockingQueue<>();
+        this.peerData = new RNSPeerData(dhash);
     }
 
     /**
@@ -142,6 +158,7 @@ public class RNSPeer {
         //this.peerLink.setLinkEstablishedCallback(this::linkEstablished);
         //this.peerLink.setLinkClosedCallback(this::linkClosed);
         //this.peerLink.setPacketCallback(this::linkPacketReceived);
+        this.peerData = new RNSPeerData(this.destinationHash);
     }
     public void initPeerLink() {
         peerDestination = new Destination(
@@ -168,7 +185,8 @@ public class RNSPeer {
         var channel = this.peerLink.getChannel();
         if (nonNull(this.peerBuffer)) {
             log.trace("peerBuffer exists: {}, link status: {}", this.peerBuffer, this.peerLink.getStatus());
-            return this.peerBuffer;
+            log.info("peerBuffer exists: {}, link status: {}", this.peerBuffer, this.peerLink.getStatus());
+            //return this.peerBuffer;
             //try {
             //    this.peerBuffer.close();
             //    this.peerBuffer = Buffer.createBidirectionalBuffer(receiveStreamId, sendStreamId, channel, this::peerBufferReady);
@@ -185,7 +203,8 @@ public class RNSPeer {
             log.info("creating buffer - peerLink status: {}, channel: {}", this.peerLink.getStatus(), channel);
             this.peerBuffer = Buffer.createBidirectionalBuffer(receiveStreamId, sendStreamId, channel, this::peerBufferReady);
         }
-        return getPeerBuffer();
+        //return getPeerBuffer();
+        return this.peerBuffer;
     }
 
     public Link getOrInitPeerLink() {
@@ -221,6 +240,10 @@ public class RNSPeer {
         }
         setLastAccessTimestamp(Instant.now());
         return getPeerLink().getChannel();
+    }
+
+    public Boolean getIsInitiator() {
+        return this.isInitiator;
     }
 
     /** Link callbacks */
@@ -285,38 +308,40 @@ public class RNSPeer {
     public void peerBufferReady(Integer readyBytes) {
         // get the message data
         var data = this.peerBuffer.read(readyBytes);
+        log.info("data length, data: {}, {}", data.length, data);
         //var pureData = Arrays.copyOfRange(data, this.messageMagic.length - 1, data.length);
         log.trace("peerBufferReady - data bytes: {}", data.length);
 
         try {
             Message message = Message.fromByteBuffer(ByteBuffer.wrap(data));
+            log.info("received message - {}", message);
             log.info("type {} message received: {}", message.getType(), message);
             // TODO: Now what with message?
             switch (message.getType()) {
+                // Do we need this ? (seems like a TCP scenario only thing)
+                // Does any RNSPeer ever require an other RNSPeer's peer list?
                 //case GET_PEERS:
                 //    onGetPeersMessage(peer, message);
                 //    break;
                 
                 case PING:
                     onPingMessage(this, message);
-                    //PongMessage pongMessage = new PongMessage();
-                    //pongMessage.setId(message.getId());
-                    //this.peerBuffer.write(pongMessage.toBytes());
-                    //this.peerBuffer.flush();
                     break;
 
                 case PONG:
                     //log.info("PONG received");
                     //break;
 
+                // Do we need this ? (We don't have RNSPeer versions)
                 //case PEERS_V2:
                 //    onPeersV2Message(peer, message);
                 //    break;
-                //
-                //default:
-                //    // Bump up to controller for possible action
-                //    Controller.getInstance().onNetworkMessage(peer, message);
-                //    break;
+                
+                default:
+                    // Bump up to controller for possible action
+                    //Controller.getInstance().onNetworkMessage(peer, message);
+                    Controller.getInstance().onRNSNetworkMessage(this, message);
+                    break;
             }
         } catch (MessageException e) {
             //log.error("{} from peer {}", e.getMessage(), this);
@@ -569,6 +594,50 @@ public class RNSPeer {
         }
     }
 
+    protected Task getMessageTask() {
+        /*
+         * If our peerLink is not in ACTIVE node and there is a message yet to be
+         * processed then don't produce another message task.
+         * This allows us to process remaining messages sequentially.
+         */
+        if (this.peerLink.getStatus() != ACTIVE) {
+            return null;
+        }
+
+        final Message nextMessage = this.pendingMessages.poll();
+
+        if (nextMessage == null) {
+            return null;
+        }
+
+        // Return a task to process message in queue
+        return new RNSMessageTask(this, nextMessage);
+    }
+
+    /**
+     * Send a Qortal message using a Reticulum Buffer
+     * 
+     * @param message message to be sent
+     * @return <code>true</code> if message successfully sent; <code>false</code> otherwise
+     */
+    public boolean sendMessage(Message message) {
+        try {
+            log.trace("Sending {} message with ID {} to peer {}", message.getType().name(), message.getId(), this);
+            var peerBuffer = getOrInitPeerBuffer();
+            this.peerBuffer.write(message.toBytes());
+            this.peerBuffer.flush();
+            return true;
+        } catch (IllegalStateException e) {
+            this.peerLink.teardown();
+            this.peerBuffer = null;
+            log.error("IllegalStateException - can't write to buffer: {}", e);
+            return false;
+        } catch (MessageException e) {
+            log.error(e.getMessage(), e);
+            return false;
+        }
+    }
+
     protected void startPings() {
         log.trace("[{}] Enabling pings for peer {}",
                 peerLink.getDestination().getHexHash(), this);
@@ -599,5 +668,36 @@ public class RNSPeer {
         this.lastPingSent = now;
 
         return new RNSPingTask(this, now);
+    }
+
+    // Peer methods reticulum implementations
+    public BlockSummaryData getChainTipData() {
+        List<BlockSummaryData> chainTipSummaries = this.peersChainTipData;
+
+        if (chainTipSummaries.isEmpty())
+            return null;
+
+        // Return last entry, which should have greatest height
+        return chainTipSummaries.get(chainTipSummaries.size() - 1);
+    }
+
+    public void setChainTipData(BlockSummaryData chainTipData) {
+        this.peersChainTipData = Collections.singletonList(chainTipData);
+    }
+
+    public List<BlockSummaryData> getChainTipSummaries() {
+        return this.peersChainTipData;
+    }
+
+    public void setChainTipSummaries(List<BlockSummaryData> chainTipSummaries) {
+        this.peersChainTipData = List.copyOf(chainTipSummaries);
+    }
+
+    public CommonBlockData getCommonBlockData() {
+        return this.commonBlockData;
+    }
+
+    public void setCommonBlockData(CommonBlockData commonBlockData) {
+        this.commonBlockData = commonBlockData;
     }
 }
