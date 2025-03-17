@@ -98,6 +98,7 @@ public class RNSPeer {
     private Boolean deleteMe = false;
     private Boolean isVacant = true;
     private Long lastPacketRtt = null;
+    private byte[] emptyBuffer = {0,0,0};
 
     private Double requestResponseProgress;
     @Setter(AccessLevel.PACKAGE) private Boolean peerTimedOut = false;
@@ -312,49 +313,49 @@ public class RNSPeer {
         //var pureData = Arrays.copyOfRange(data, this.messageMagic.length - 1, data.length);
         log.trace("peerBufferReady - data bytes: {}", data.length);
 
-        try {
-            Message message = Message.fromByteBuffer(ByteBuffer.wrap(data));
-            log.info("received message - {}", message);
-            log.info("type {} message received: {}", message.getType(), message);
-            // TODO: Now what with message?
-            switch (message.getType()) {
-                // Do we need this ? (seems like a TCP scenario only thing)
-                // Does any RNSPeer ever require an other RNSPeer's peer list?
-                //case GET_PEERS:
-                //    onGetPeersMessage(peer, message);
-                //    break;
-                
-                case PING:
-                    onPingMessage(this, message);
-                    break;
+        if (ByteBuffer.wrap(data, 0, emptyBuffer.length).equals(ByteBuffer.wrap(emptyBuffer, 0, emptyBuffer.length))) {
+            log.info("peerBufferReady - empty buffer detected (length: {})", data.length);
+        } else {    
+            try {
+                //this.peerBuffer.flush();
+                Message message = Message.fromByteBuffer(ByteBuffer.wrap(data));
+                log.info("type {} message received ({} bytes): {}", message.getType(), data.length, message);
+                // Handle message based on type
+                switch (message.getType()) {
+                    // Do we need this ? (seems like a TCP scenario only thing)
+                    // Does any RNSPeer ever require an other RNSPeer's peer list?
+                    //case GET_PEERS:
+                    //    //onGetPeersMessage(peer, message);
+                    //    onGetRNSPeersMessage(peer, message);
+                    //    break;
 
-                case PONG:
-                    //log.info("PONG received");
-                    //break;
+                    case PING:
+                        onPingMessage(this, message);
+                        // Note: buffer flush done in onPingMessage method
+                        break;
 
-                // Do we need this ? (We don't have RNSPeer versions)
-                //case PEERS_V2:
-                //    onPeersV2Message(peer, message);
-                //    break;
-                
-                default:
-                    // Bump up to controller for possible action
-                    //Controller.getInstance().onNetworkMessage(peer, message);
-                    Controller.getInstance().onRNSNetworkMessage(this, message);
-                    break;
+                    case PONG:
+                        //log.info("PONG received");
+                        //break;
+
+                    // Do we need this ? (We don't have RNSPeer versions)
+                    //case PEERS_V2:
+                    //    onPeersV2Message(peer, message);
+                    //    this.peerBuffer.flush();
+                    //    break;
+
+                    default:
+                        // Bump up to controller for possible action
+                        //Controller.getInstance().onNetworkMessage(peer, message);
+                        Controller.getInstance().onRNSNetworkMessage(this, message);
+                        this.peerBuffer.flush();
+                        break;
+                }
+            } catch (MessageException e) {
+                //log.error("{} from peer {}", e.getMessage(), this);
+                log.error("{} from peer {}", e, this);
             }
-        } catch (MessageException e) {
-            //log.error("{} from peer {}", e.getMessage(), this);
-            log.error("{} from peer {}", e, this);
         }
-        //var decodedData = new String(data);
-        //log.info("Received data over the buffer: {}", decodedData);
-
-        //if (isFalse(this.isInitiator)) {
-        //    // TODO: process data and reply
-        //} else {
-        //    this.peerBuffer.flush(); // clear buffer
-        //}
     }
 
     /**
