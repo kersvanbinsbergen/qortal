@@ -219,7 +219,7 @@ public class RNSNetwork {
         baseDestination.announce();
         log.debug("Sent initial announce from {} ({})", Hex.encodeHexString(baseDestination.getHash()), baseDestination.getName());
 
-        // Start up first networking thread (the "server loop", JS: the "Tasks engine")
+        // Start up first networking thread (the "server loop", the "Tasks engine")
         rnsNetworkEPC.start();
     }
 
@@ -299,6 +299,10 @@ public class RNSNetwork {
             } catch (InterruptedException e) {
                 log.error("exception: ", e);
             }
+            //var pl = p.getPeerLink();
+            //if (nonNull(pl) & (pl.getStatus() == ACTIVE)) {
+            //    pl.teardown();
+            //}
         }
         // Stop processing threads (the "server loop")
         try {
@@ -467,33 +471,33 @@ public class RNSNetwork {
                 return task;
             }
             
-            task = maybeProduceBroadcastTask(now);
-            if (task != null) {
-                return task;
-            }
+            //task = maybeProduceBroadcastTask(now);
+            //if (task != null) {
+            //    return task;
+            //}
             return null;
         }
 
-        //private Task maybeProducePeerMessageTask() {
-        //    return getImmutableConnectedPeers().stream()
-        //            .map(Peer::getMessageTask)
-        //            .filter(Objects::nonNull)
-        //            .findFirst()
-        //            .orElse(null);
-        //}
+        ////private Task maybeProducePeerMessageTask() {
+        ////    return getImmutableConnectedPeers().stream()
+        ////            .map(Peer::getMessageTask)
+        ////            .filter(Objects::nonNull)
+        ////            .findFirst()
+        ////            .orElse(null);
+        ////}
+        ////private Task maybeProducePeerMessageTask() {
+        ////    return getImmutableIncomingPeers().stream()
+        ////            .map(RNSPeer::getMessageTask)
+        ////            .filter(RNSPeer::isAvailable)
+        ////            .findFirst()
+        ////            .orElse(null);
+        ////}
         //private Task maybeProducePeerMessageTask() {
         //    return getImmutableIncomingPeers().stream()
         //            .map(RNSPeer::getMessageTask)
-        //            .filter(RNSPeer::isAvailable)
         //            .findFirst()
         //            .orElse(null);
         //}
-        private Task maybeProducePeerMessageTask() {
-            return getImmutableIncomingPeers().stream()
-                    .map(RNSPeer::getMessageTask)
-                    .findFirst()
-                    .orElse(null);
-        }
 
         //private Task maybeProducePeerPingTask(Long now) {
         //    return getImmutableHandshakedPeers().stream()
@@ -604,8 +608,8 @@ public class RNSNetwork {
     //@Synchronized
     public void prunePeers() throws DataException {
         // run periodically (by the Controller)
-        //var peerList = getLinkedPeers();
-        var peerList = getImmutableLinkedPeers();
+        var peerList = getLinkedPeers();
+        //var peerList = getImmutableLinkedPeers();
         log.info("number of links (linkedPeers) before pruning: {}", peerList.size());
         Link pLink;
         LinkStatus lStatus;

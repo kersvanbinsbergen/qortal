@@ -45,9 +45,10 @@ public class RNSPingTask implements Task {
         //} catch (MessageException e) {
         //    LOGGER.error(e.getMessage(), e);
         //}
+        // Note: We might use peer.sendMessage(pingMessage) instead 
         peer.getResponse(pingMessage);
 
-        //// task is not over here.
+        //// task is not over here (Reticulum is asynchronous)
         //peer.setLastPing(NTP.getTime() - now);
     }
 }

@@ -24,6 +24,7 @@ public class RNSMessageTask implements Task {
     @Override
     public void perform() throws InterruptedException {
         //RNSNetwork.getInstance().onMessage(peer, nextMessage);
-        // TODO: what do we do in the Reticulum case? => implement
+        // TODO: what do we do in the Reticulum case?
+        // Note: this is automatically handled (asynchronously) by the RNSPeer peerBufferReady callback
     }
 }
