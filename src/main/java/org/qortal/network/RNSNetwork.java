@@ -70,6 +70,7 @@ import java.util.concurrent.atomic.AtomicLong;
 //import java.util.concurrent.locks.ReentrantLock;
 import java.util.Objects;
 import java.util.function.Function;
+import java.time.Instant;
 
 import org.apache.commons.codec.binary.Hex;
 import org.qortal.utils.ExecuteProduceConsume;
@@ -129,11 +130,16 @@ public class RNSNetwork {
     // just in case the classic TCP/IP Networking is turned off.
     private static final byte[] MAINNET_MESSAGE_MAGIC = new byte[]{0x51, 0x4f, 0x52, 0x54}; // QORT
     private static final byte[] TESTNET_MESSAGE_MAGIC = new byte[]{0x71, 0x6f, 0x72, 0x54}; // qorT
-    private static final int BROADCAST_CHAIN_TIP_DEPTH = 7; // Just enough to fill a SINGLE TCP packet (~1440 bytes)
+    private static final int BROADCAST_CHAIN_TIP_DEPTH = 7; // (~1440 bytes)
     /**
      * How long between informational broadcasts to all ACTIVE peers, in milliseconds.
      */
     private static final long BROADCAST_INTERVAL = 30 * 1000L; // ms
+    /**
+     * Link low-level ping interval and timeout
+     */
+    private static final long LINK_PING_INTERVAL = 34 * 1000L; // ms
+    private static final long LINK_UNREACHABLE_TIMEOUT = 2 * LINK_PING_INTERVAL;
 
     //private static final Logger logger = LoggerFactory.getLogger(RNSNetwork.class);
     
@@ -279,7 +285,7 @@ public class RNSNetwork {
     }
 
     public void shutdown() {
-        isShuttingDown = true;
+        this.isShuttingDown = true;
         log.info("shutting down Reticulum");
         
         // gracefully close links of peers that point to us
@@ -430,6 +436,9 @@ public class RNSNetwork {
                     log.info("added new RNSPeer, destinationHash: {}", Hex.encodeHexString(destinationHash));
                 }
             }
+            // Chance to announce instead of waiting for next pruning.
+            // Note: good in theory but leads to ping-pong of announces => not a good idea!
+            //maybeAnnounce(getBaseDestination());
         }
     }
 
@@ -440,6 +449,7 @@ public class RNSNetwork {
 
         private final AtomicLong nextConnectTaskTimestamp = new AtomicLong(0L); // ms - try first connect once NTP syncs
         private final AtomicLong nextBroadcastTimestamp = new AtomicLong(0L); // ms - try first broadcast once NTP syncs
+        private final AtomicLong nextPingTimestamp = new AtomicLong(0L); // ms - try first low-level Ping
 
         private Iterator<SelectionKey> channelIterator = null;
 
@@ -457,8 +467,8 @@ public class RNSNetwork {
         protected Task produceTask(boolean canBlock) throws InterruptedException {
             Task task;
 
-            //// TODO: enable this once we figure out how to add pending messages in RNSPeer
-            ///        (RNSPeer: pendingMessages.offer(message))
+            //// TODO: Needed? Figure out how to add pending messages in RNSPeer
+            ////        (RNSPeer: pendingMessages.offer(message))
             //task = maybeProducePeerMessageTask();
             //if (task != null) {
             //    return task;
@@ -466,6 +476,7 @@ public class RNSNetwork {
             
             final Long now = NTP.getTime();
             
+            // ping task (Link+Channel+Buffer)
             task = maybeProducePeerPingTask(now);
             if (task != null) {
                 return task;
@@ -492,9 +503,12 @@ public class RNSNetwork {
         ////            .findFirst()
         ////            .orElse(null);
         ////}
+        //// Note: we might not need this. All messages handled asynchronously in Reticulum
+        ////       (RNSPeer peerBufferReady callback)
         //private Task maybeProducePeerMessageTask() {
-        //    return getImmutableIncomingPeers().stream()
+        //    return getImmutableLinkedPeers().stream()
         //            .map(RNSPeer::getMessageTask)
+        //            .filter(Objects::nonNull)
         //            .findFirst()
         //            .orElse(null);
         //}
@@ -613,13 +627,15 @@ public class RNSNetwork {
         log.info("number of links (linkedPeers) before pruning: {}", peerList.size());
         Link pLink;
         LinkStatus lStatus;
+        //final Long now = NTP.getTime();
+        Instant now = Instant.now();
         for (RNSPeer p: peerList) {
             pLink = p.getPeerLink();
             log.info("prunePeers - pLink: {}, destinationHash: {}",
                 pLink, Hex.encodeHexString(p.getDestinationHash()));
             log.debug("peer: {}", p);
             if (nonNull(pLink)) {
-                if (p.getPeerTimedOut()) {
+                if ((p.getPeerTimedOut()) || (p.getLastPingResponseReceived() > LINK_UNREACHABLE_TIMEOUT)) {
                     // close peer link for now
                     pLink.teardown();
                 }
@@ -669,12 +685,16 @@ public class RNSNetwork {
         var ips = getImmutableLinkedPeers();
         for (RNSPeer p: ips) {
             pLink = p.getPeerLink();
-            p.pingRemote();
-            try {
-                TimeUnit.SECONDS.sleep(2); // allow for peers to disconnect gracefully
-            } catch (InterruptedException e) {
-                log.error("exception: ", e);
+            if (now.minusMillis(LINK_UNREACHABLE_TIMEOUT).isAfter(p.getLastAccessTimestamp())) {
+                // Link was not accessed for too long
+                pLink.teardown();
             }
+            //p.pingRemote();
+            //try {
+            //    TimeUnit.SECONDS.sleep(2); // allow for peers to disconnect gracefully
+            //} catch (InterruptedException e) {
+            //    log.error("exception: ", e);
+            //}
             if ((nonNull(pLink) && (pLink.getStatus() == ACTIVE))) {
                 activePeerCount = activePeerCount + 1;
             }
