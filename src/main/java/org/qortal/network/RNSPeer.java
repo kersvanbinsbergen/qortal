@@ -89,7 +89,8 @@ public class RNSPeer {
     Destination peerDestination;      // OUT destination created for this
     private Identity serverIdentity;
     @Setter(AccessLevel.PACKAGE) private Instant creationTimestamp;
-    private Instant lastAccessTimestamp;
+    @Setter(AccessLevel.PACKAGE) private Instant lastAccessTimestamp;
+    @Setter(AccessLevel.PACKAGE) private Instant lastLinkProbeTimestamp;
     Link peerLink;
     byte[] peerLinkHash;
     BufferedRWPair peerBuffer;
@@ -111,7 +112,7 @@ public class RNSPeer {
     private byte[] messageMagic;  // set in message creating classes
     private Long lastPing = null;      // last (packet) ping roundtrip time [ms]
     private Long lastPingSent = null;  // time last (packet) ping was sent, or null if not started.
-    @Setter(AccessLevel.PACKAGE) private Long lastPingResponseReceived = null; // time last (packet) ping succeeded
+    @Setter(AccessLevel.PACKAGE) private Instant lastPingResponseReceived = null; // time last (packet) ping succeeded
     private Map<Integer, BlockingQueue<Message>> replyQueues;
     private LinkedBlockingQueue<Message> pendingMessages;
     // Versioning
@@ -155,7 +156,8 @@ public class RNSPeer {
         this.serverIdentity = link.getRemoteIdentity();
 
         this.creationTimestamp = Instant.now();
-        this.lastAccessTimestamp = null;
+        this.lastAccessTimestamp = Instant.now();
+        this.lastLinkProbeTimestamp = null;
         this.isInitiator = false;
         this.isVacant = false;
 
@@ -175,7 +177,8 @@ public class RNSPeer {
         peerDestination.setProofStrategy(ProofStrategy.PROVE_ALL);
 
         this.creationTimestamp = Instant.now();
-        this.lastAccessTimestamp = null;
+        this.lastAccessTimestamp = Instant.now();
+        this.lastLinkProbeTimestamp = null;
         this.isInitiator = true;
 
         this.peerLink = new Link(peerDestination);
@@ -233,8 +236,9 @@ public class RNSPeer {
         if (nonNull(this.peerLink)) {
             log.info("shutdown - peerLink: {}, status: {}", peerLink, peerLink.getStatus());
             if (peerLink.getStatus() == ACTIVE) {
-                if (isFalse(this.isInitiator)) {
-                    sendCloseToRemote(this.peerLink);
+                if (nonNull(this.peerBuffer)) {
+                    this.peerBuffer.close();
+                    this.peerBuffer = null;
                 }
                 this.peerLink.teardown();
             } else {
@@ -290,6 +294,7 @@ public class RNSPeer {
         var msgText = new String(message, StandardCharsets.UTF_8);
         if (msgText.equals("ping")) {
             log.info("received ping on link");
+            this.lastLinkProbeTimestamp = Instant.now();
         } else if (msgText.startsWith("close::")) {
             var targetPeerHash = subarray(message, 7, message.length);
             log.info("peer dest hash: {}, target hash: {}",
@@ -297,6 +302,10 @@ public class RNSPeer {
                 encodeHexString(targetPeerHash));
             if (Arrays.equals(destinationHash, targetPeerHash)) {
                 log.info("closing link: {}", peerLink.getDestination().getHexHash());
+                if (nonNull(this.peerBuffer)) {
+                    this.peerBuffer.close();
+                    this.peerBuffer = null;
+                }
                 peerLink.teardown();
             }
         } else if (msgText.startsWith("open::")) {
@@ -309,7 +318,6 @@ public class RNSPeer {
                 getOrInitPeerLink();
             }
         }
-        // TODO: process incoming packet.... 
     }
 
     /*
@@ -321,20 +329,20 @@ public class RNSPeer {
         // get the message data
         byte[] data = this.peerBuffer.read(readyBytes);
         ByteBuffer bb = ByteBuffer.wrap(data);
-        log.info("data length: {}, MAGIC: {}, data: {}, ByteBuffer: {}", data.length, this.messageMagic, data, bb);
-        //log.info("data length: {}, ByteBuffer: {}", data.length, bb);
-        //var pureData = Arrays.copyOfRange(data, this.messageMagic.length - 1, data.length);
-        log.trace("peerBufferReady - data bytes: {}", data.length);
+        //log.info("data length: {}, MAGIC: {}, data: {}, ByteBuffer: {}", data.length, this.messageMagic, data, bb);
+        //log.info("data length: {}, MAGIC: {}, ByteBuffer: {}", data.length, this.messageMagic, bb);
+        //log.trace("peerBufferReady - data bytes: {}", data.length);
         this.lastAccessTimestamp = Instant.now();
 
         if (ByteBuffer.wrap(data, 0, emptyBuffer.length).equals(ByteBuffer.wrap(emptyBuffer, 0, emptyBuffer.length))) {
             log.info("peerBufferReady - empty buffer detected (length: {})", data.length);
-            //this.peerBuffer.flush();
-        } else {    
+        }
+        else {    
             try {
                 //log.info("***> creating message from {} bytes", data.length);
                 Message message = Message.fromByteBuffer(bb);
-                log.info("*=> type {} message received ({} bytes): {}", message.getType(), data.length, message);
+                //log.info("*=> type {} message received ({} bytes): {}", message.getType(), data.length, message);
+                log.info("*=> type {} message received ({} bytes)", message.getType(), data.length);
                 // Handle message based on type
                 switch (message.getType()) {
                     // Do we need this ? (seems like a TCP scenario only thing)
@@ -345,6 +353,7 @@ public class RNSPeer {
                     //    break;
 
                     case PING:
+                        this.lastPingResponseReceived = Instant.now();
                         if (isFalse(this.isInitiator)) {
                             onPingMessage(this, message);
                             // Note: buffer flush done in onPingMessage method
@@ -353,13 +362,11 @@ public class RNSPeer {
 
                     case PONG:
                         log.info("PONG received");
-                        //this.peerBuffer.flush();
                         break;
 
                     // Do we need this ? (no need to relay peer list...)
                     //case PEERS_V2:
                     //    onPeersV2Message(peer, message);
-                    //    this.peerBuffer.flush();
                     //    break;
 
                     default:
@@ -367,7 +374,6 @@ public class RNSPeer {
                         // Bump up to controller for possible action
                         //Controller.getInstance().onNetworkMessage(peer, message);
                         Controller.getInstance().onRNSNetworkMessage(this, message);
-                        //this.peerBuffer.flush();
                         break;
                 }
             } catch (MessageException e) {
@@ -375,7 +381,6 @@ public class RNSPeer {
                 log.error("{} from peer {}", e, this);
                 log.info("{} from peer {}", e, this);
             }
-            //this.peerBuffer.flush(); // clear buffer
         }
     }
 

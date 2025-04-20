@@ -82,6 +82,7 @@ import org.qortal.network.message.BlockSummariesV2Message;
 import org.qortal.network.message.TransactionSignaturesMessage;
 import org.qortal.network.message.GetUnconfirmedTransactionsMessage;
 import org.qortal.network.task.RNSBroadcastTask;
+import org.qortal.network.task.RNSPrunePeersTask;
 import org.qortal.controller.Controller;
 import org.qortal.repository.Repository;
 import org.qortal.repository.RepositoryManager;
@@ -136,10 +137,14 @@ public class RNSNetwork {
      */
     private static final long BROADCAST_INTERVAL = 30 * 1000L; // ms
     /**
+     * How log between pruning of peers
+     */
+    private static final long PRUNE_INTERVAL = 2 * 60 * 1000L; // ms
+    /**
      * Link low-level ping interval and timeout
      */
-    private static final long LINK_PING_INTERVAL = 34 * 1000L; // ms
-    private static final long LINK_UNREACHABLE_TIMEOUT = 2 * LINK_PING_INTERVAL;
+    private static final long LINK_PING_INTERVAL = 55 * 1000L; // ms
+    private static final long LINK_UNREACHABLE_TIMEOUT = 3 * LINK_PING_INTERVAL;
 
     //private static final Logger logger = LoggerFactory.getLogger(RNSNetwork.class);
     
@@ -450,11 +455,14 @@ public class RNSNetwork {
         private final AtomicLong nextConnectTaskTimestamp = new AtomicLong(0L); // ms - try first connect once NTP syncs
         private final AtomicLong nextBroadcastTimestamp = new AtomicLong(0L); // ms - try first broadcast once NTP syncs
         private final AtomicLong nextPingTimestamp = new AtomicLong(0L); // ms - try first low-level Ping
+        private final AtomicLong nextPruneTimestamp = new AtomicLong(0L); // ms - try first low-level Ping
 
         private Iterator<SelectionKey> channelIterator = null;
 
         RNSNetworkProcessor(ExecutorService executor) {
             super(executor);
+            final Long now = NTP.getTime();
+            nextPruneTimestamp.set(now + PRUNE_INTERVAL/2);
         }
 
         @Override
@@ -482,10 +490,17 @@ public class RNSNetwork {
                 return task;
             }
             
-            //task = maybeProduceBroadcastTask(now);
-            //if (task != null) {
-            //    return task;
-            //}
+            task = maybeProduceBroadcastTask(now);
+            if (task != null) {
+                return task;
+            }
+
+            // Prune stuck/slow/old peers (moved from Controller)
+            task = maybeProduceRNSPrunePeersTask(now);
+            if (task != null) {
+                return task;
+            }
+
             return null;
         }
 
@@ -541,9 +556,18 @@ public class RNSNetwork {
             if (now == null || now < nextBroadcastTimestamp.get()) {
                 return null;
             }
-        
+            
             nextBroadcastTimestamp.set(now + BROADCAST_INTERVAL);
             return new RNSBroadcastTask();
+        }
+
+        private Task maybeProduceRNSPrunePeersTask(Long now) {
+            if (now == null || now < nextPruneTimestamp.get()) {
+                return null;
+            }
+            
+            nextPruneTimestamp.set(now + PRUNE_INTERVAL);
+            return new RNSPrunePeersTask();
         }
     }
 
@@ -565,6 +589,9 @@ public class RNSNetwork {
     }
 
     public void removeLinkedPeer(RNSPeer peer) {
+        if (nonNull(peer.getPeerBuffer())) {
+            peer.getPeerBuffer().close();
+        }
         if (nonNull(peer.getPeerLink())) {
             peer.getPeerLink().teardown();
         }
@@ -619,30 +646,59 @@ public class RNSNetwork {
     //    }
     //}
 
+    private Boolean isUnreachable(RNSPeer peer) {
+        var result = peer.getDeleteMe();
+        var now = Instant.now();
+        var peerLastAccessTimestamp = peer.getLastAccessTimestamp();
+        if (peerLastAccessTimestamp.isBefore(now.minusMillis(LINK_UNREACHABLE_TIMEOUT))) {
+            result = true;
+        }
+        return result;
+    }
+
+    public List<RNSPeer> incomingNonActivePeers() {
+        var ips = getIncomingPeers();
+        List<RNSPeer> result = Collections.synchronizedList(new ArrayList<>());
+        Link pl;
+        for (RNSPeer p: ips) {
+            pl = p.getPeerLink();
+            if (nonNull(pl)) {
+                if (pl.getStatus() != ACTIVE) {
+                    result.add(p);
+                }
+            } else {
+                result.add(p);
+            }
+        }
+        return result;
+    }
+
     //@Synchronized
     public void prunePeers() throws DataException {
         // run periodically (by the Controller)
         var peerList = getLinkedPeers();
-        //var peerList = getImmutableLinkedPeers();
-        log.info("number of links (linkedPeers) before pruning: {}", peerList.size());
+        var incomingPeerList = getIncomingPeers();
+        log.info("number of links (linkedPeers / incomingPeers) before prunig: {}, {}", peerList.size(),
+                incomingPeerList.size());
         Link pLink;
         LinkStatus lStatus;
-        //final Long now = NTP.getTime();
-        Instant now = Instant.now();
+        var now = Instant.now();
         for (RNSPeer p: peerList) {
             pLink = p.getPeerLink();
+            //var peerLastAccessTimestamp = p.getLastAccessTimestamp();
+            var peerLastPingResponseReceived = p.getLastPingResponseReceived();
             log.info("prunePeers - pLink: {}, destinationHash: {}",
                 pLink, Hex.encodeHexString(p.getDestinationHash()));
             log.debug("peer: {}", p);
             if (nonNull(pLink)) {
-                if ((p.getPeerTimedOut()) || (p.getLastPingResponseReceived() > LINK_UNREACHABLE_TIMEOUT)) {
+                if ((p.getPeerTimedOut()) && (peerLastPingResponseReceived.isBefore(now.minusMillis(LINK_UNREACHABLE_TIMEOUT)))) {
                     // close peer link for now
                     pLink.teardown();
                 }
                 lStatus = pLink.getStatus();
                 log.info("Link {} status: {}", pLink, lStatus);
                 // lStatus in: PENDING, HANDSHAKE, ACTIVE, STALE, CLOSED
-                if ((lStatus == STALE) || (pLink.getTeardownReason() == TIMEOUT) || (p.getDeleteMe())) {
+                if ((lStatus == STALE) || (pLink.getTeardownReason() == TIMEOUT) || (isUnreachable(p))) {
                     //p.shutdown();
                     //peerList.remove(p);
                     removeLinkedPeer(p);
@@ -653,66 +709,28 @@ public class RNSNetwork {
                     //peerList.remove(p);
                     removeLinkedPeer(p);
                 }
+                // either reach peer or disable link
+                p.pingRemote();
             } else {
-                //peerList.remove(p);
-                removeLinkedPeer(p);
-            }
-        }
-        //var incomingPeerList = getImmutableIncomingPeers();
-        var incomingPeerList = getIncomingPeers();
-        for (RNSPeer ip: incomingPeerList) {
-            pLink = ip.getPeerLink();
-            //log.info("prunePeers - {} incoming peer: {}", pLink.getStatus(), ip);
-            if (nonNull(pLink)) {
-                if (pLink.getStatus() != ACTIVE) {
-                    log.info("removing inactive incoming/non-initiator peer.");
-                    removeIncomingPeer(ip);
-                } else {
-                    log.info("prunePeers - {} incoming/non-initiator peer: {}", pLink.getStatus(), pLink);
+                if (peerLastPingResponseReceived.isBefore(now.minusMillis(LINK_UNREACHABLE_TIMEOUT))) {
+                    //peerList.remove(p);
+                    removeLinkedPeer(p);
                 }
             }
-            else {
-                log.info("prunePeers - null incoming/non-initiator peer: {}", ip);
-                //removeIncomingPeer(ip);
-            }
+        }
+        List<RNSPeer> inaps = incomingNonActivePeers();
+        //log.info("number of inactive incoming peers: {}", inaps.size());
+        //var incomingPeerList = getIncomingPeers();
+        //log.info("number of links (linkedPeers / incomingPeers) before prunig: {}, {}", peerList.size(),
+        //        incomingPeerList.size());
+        for (RNSPeer p: inaps) {
+            incomingPeerList.remove(incomingPeerList.indexOf(p));
         }
         //removeExpiredPeers(this.linkedPeers);
         log.info("number of links (linkedPeers / incomingPeers) after prunig: {}, {}", peerList.size(),
                 incomingPeerList.size());
-        //log.info("we have {} non-initiator links, list: {}", incomingLinks.size(), incomingLinks);
-        var activePeerCount = 0;
-        //var lps =  RNSNetwork.getInstance().getLinkedPeers();
-        var ips = getImmutableLinkedPeers();
-        for (RNSPeer p: ips) {
-            pLink = p.getPeerLink();
-            if (now.minusMillis(LINK_UNREACHABLE_TIMEOUT).isAfter(p.getLastAccessTimestamp())) {
-                // Link was not accessed for too long
-                pLink.teardown();
-            }
-            //p.pingRemote();
-            //try {
-            //    TimeUnit.SECONDS.sleep(2); // allow for peers to disconnect gracefully
-            //} catch (InterruptedException e) {
-            //    log.error("exception: ", e);
-            //}
-            if ((nonNull(pLink) && (pLink.getStatus() == ACTIVE))) {
-                activePeerCount = activePeerCount + 1;
-            }
-        }
-        log.info("we have {} active peers (linkedPeers)", activePeerCount);
         maybeAnnounce(getBaseDestination());
     }
-
-    //public void removeExpiredPeers(List<RNSPeer> peerList) {
-    //    //List<RNSPeer> peerList = this.linkedPeers;
-    //    for (RNSPeer p: peerList) {
-    //        if (p.getPeerLink() == null) {
-    //            peerList.remove(p);
-    //        } else if (p.getPeerLink().getStatus() == STALE) {
-    //            peerList.remove(p);
-    //        }
-    //    }
-    //}
 
     public void maybeAnnounce(Destination d) {
         if (getLinkedPeers().size() < MIN_DESIRED_PEERS) {

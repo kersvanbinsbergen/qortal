@@ -855,29 +855,29 @@ public class Controller extends Thread {
 					repositoryMaintenanceInterval = getRandomRepositoryMaintenanceInterval();
 				}
 
-				// Prune stuck/slow/old peers
-				if (now >= prunePeersTimestamp + prunePeersInterval) {
-					prunePeersTimestamp = now + prunePeersInterval;
+				//// Prune stuck/slow/old peers
+				//if (now >= prunePeersTimestamp + prunePeersInterval) {
+				//	prunePeersTimestamp = now + prunePeersInterval;
+				//
+				//	try {
+				//		LOGGER.debug("Pruning peers...");
+				//		Network.getInstance().prunePeers();
+				//	} catch (DataException e) {
+				//		LOGGER.warn(String.format("Repository issue when trying to prune peers: %s", e.getMessage()));
+				//	}
+				//}
 
-					try {
-						LOGGER.debug("Pruning peers...");
-						Network.getInstance().prunePeers();
-					} catch (DataException e) {
-						LOGGER.warn(String.format("Repository issue when trying to prune peers: %s", e.getMessage()));
-					}
-				}
-
-				// Q: Do we need global pruning?
-				if (now >= pruneRNSPeersTimestamp + pruneRNSPeersInterval) {
-					pruneRNSPeersTimestamp = now + pruneRNSPeersInterval;
-
-					try {
-						LOGGER.debug("Pruning Reticulum peers...");
-						RNSNetwork.getInstance().prunePeers();
-					} catch (DataException e) {
-						LOGGER.warn(String.format("Repository issue when trying to prune Reticulum peers: %s", e.getMessage()));
-					}
-				}
+				//// Q: Do we need global pruning?
+				//if (now >= pruneRNSPeersTimestamp + pruneRNSPeersInterval) {
+				//	pruneRNSPeersTimestamp = now + pruneRNSPeersInterval;
+				//
+				//	try {
+				//		LOGGER.debug("Pruning Reticulum peers...");
+				//		RNSNetwork.getInstance().prunePeers();
+				//	} catch (DataException e) {
+				//		LOGGER.warn(String.format("Repository issue when trying to prune Reticulum peers: %s", e.getMessage()));
+				//	}
+				//}
 
 				// Delete expired transactions
 				if (now >= deleteExpiredTimestamp) {
@@ -1278,6 +1278,17 @@ public class Controller extends Thread {
 			network.broadcast(network::buildGetUnconfirmedTransactionsMessage);
 		}
 
+	}
+
+	public void doRNSPrunePeers() {
+		RNSNetwork network = RNSNetwork.getInstance();
+
+        try {
+            LOGGER.debug("Pruning peers...");
+            network.prunePeers();
+        } catch (DataException e) {
+            LOGGER.warn(String.format("Repository issue when trying to prune peers: %s", e.getMessage()));
+        }
 	}
 
 	public void onMintingPossibleChange(boolean isMintingPossible) {
