@@ -361,7 +361,7 @@ public class RNSPeer {
                         break;
 
                     case PONG:
-                        log.info("PONG received");
+                        //log.info("PONG received");
                         break;
 
                     // Do we need this ? (no need to relay peer list...)
