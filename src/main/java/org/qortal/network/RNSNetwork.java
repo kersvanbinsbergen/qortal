@@ -106,6 +106,7 @@ public class RNSNetwork {
     static final String defaultConfigPath = Settings.getInstance().isTestNet() ? RNSCommon.defaultRNSConfigPathTestnet: RNSCommon.defaultRNSConfigPath;
     private final int MAX_PEERS = Settings.getInstance().getReticulumMaxPeers();
     private final int MIN_DESIRED_PEERS = Settings.getInstance().getReticulumMinDesiredPeers();
+    private final long PRUNE_INTERVAL = Settings.getInstance().getReticulumPruneInterval();
     Identity serverIdentity;
     public Destination baseDestination;
     private volatile boolean isShuttingDown = false;
@@ -136,10 +137,6 @@ public class RNSNetwork {
      * How long between informational broadcasts to all ACTIVE peers, in milliseconds.
      */
     private static final long BROADCAST_INTERVAL = 30 * 1000L; // ms
-    /**
-     * How log between pruning of peers
-     */
-    private static final long PRUNE_INTERVAL = 2 * 60 * 1000L; // ms
     /**
      * Link low-level ping interval and timeout
      */
