@@ -622,8 +622,6 @@ public class Settings {
 	private int reticulumMinDesiredPeers = 3;
 	/** Maximum number of task executor network threads */
 	private int reticulumMaxNetworkThreadPoolSize = 89;
-	/** How long [ms] between pruning of peers */
-	private long reticulumPruneInterval = 2 * 60 * 1000L; // ms;
 
 	// Constructors
 
@@ -1393,10 +1391,6 @@ public class Settings {
 	public int getReticulumMaxNetworkThreadPoolSize() {
 		return this.reticulumMaxNetworkThreadPoolSize;
   	}
-
-	public long getReticulumPruneInterval() {
-		return this.reticulumPruneInterval;
-	}
 
 	public int getBuildArbitraryResourcesBatchSize() {
 		return buildArbitraryResourcesBatchSize;
