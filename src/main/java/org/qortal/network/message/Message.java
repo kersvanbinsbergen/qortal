@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Network message for sending over network, or unpacked data received from network.
@@ -33,6 +35,7 @@ import java.util.Arrays;
  * </p>
  */
 public abstract class Message {
+    private static final Logger LOGGER = LogManager.getLogger(Message.class);
 
 	// MAGIC(4) + TYPE(4) + HAS-ID(1) + ID?(4) + DATA-SIZE(4) + CHECKSUM?(4) + DATA?(*)
 	private static final int MAGIC_LENGTH = 4;
@@ -95,9 +98,11 @@ public abstract class Message {
 			byte[] messageMagic = new byte[MAGIC_LENGTH];
 			readOnlyBuffer.get(messageMagic);
 
-			if (!Arrays.equals(messageMagic, Network.getInstance().getMessageMagic()))
+			if (!Arrays.equals(messageMagic, Network.getInstance().getMessageMagic())) {
+				LOGGER.info("xyz - mM: {}, Network getMessageMagic: {}", messageMagic, Network.getInstance().getMessageMagic());
 				// Didn't receive correct Message "magic"
 				throw new MessageException("Received incorrect message 'magic'");
+			}
 
 			// Find supporting object
 			int typeValue = readOnlyBuffer.getInt();
