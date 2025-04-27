@@ -123,8 +123,6 @@ public class RNSNetwork {
      */
     private final List<RNSPeer> linkedPeers = Collections.synchronizedList(new ArrayList<>());
     private List<RNSPeer> immutableLinkedPeers = Collections.emptyList();
-    //private final List<RNSPeer> activeLinkedPeers = Collections.synchronizedList(new ArrayList<>());
-    //private List<RNSPeer> immutableActiveLinkedPeers = Collections.emptyList();
     private final List<RNSPeer> incomingPeers = Collections.synchronizedList(new ArrayList<>());
     private List<RNSPeer> immutableIncomingPeers = Collections.emptyList();
 
