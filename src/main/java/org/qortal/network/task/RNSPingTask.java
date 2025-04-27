@@ -6,7 +6,6 @@ import org.qortal.network.RNSPeer;
 import org.qortal.network.message.Message;
 import org.qortal.network.message.MessageType;
 import org.qortal.network.message.PingMessage;
-//import org.qortal.network.message.RNSPingMessage;
 import org.qortal.network.message.MessageException;
 import org.qortal.utils.ExecuteProduceConsume.Task;
 import org.qortal.utils.NTP;
@@ -31,21 +30,11 @@ public class RNSPingTask implements Task {
 
     @Override
     public void perform() throws InterruptedException {
-        //RNSPingMessage pingMessage = new RNSPingMessage();
         PingMessage pingMessage = new PingMessage();
 
-        //try {
-        //    var peerBuffer = this.peer.getOrInitPeerBuffer();
-        //    LOGGER.info("message toBytes: {}", pingMessage.toBytes());
-        //    peerBuffer.write(pingMessage.toBytes());
-        //    peerBuffer.flush();
-        //} catch (IllegalStateException e) {
-        //    //log.warn("Can't write to buffer (remote buffer down?)");
-        //    LOGGER.error("IllegalStateException - can't write to buffer: e", e);
-        //} catch (MessageException e) {
-        //    LOGGER.error(e.getMessage(), e);
-        //}
-        // Note: We might use peer.sendMessage(pingMessage) instead 
+        // Note: Even though getResponse would work, we can use
+        //       peer.sendMessage(pingMessage) using Reticulum buffer instead.
+        //       More efficient and saves room for other request/response tasks.
         //peer.getResponse(pingMessage);
         peer.sendMessage(pingMessage);
 

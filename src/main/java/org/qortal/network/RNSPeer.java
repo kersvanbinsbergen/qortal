@@ -41,6 +41,7 @@ import org.qortal.data.block.BlockSummaryData;
 import org.qortal.data.block.CommonBlockData;
 import org.qortal.data.network.RNSPeerData;
 import org.qortal.network.message.Message;
+import org.qortal.network.message.MessageType;
 import org.qortal.network.message.PingMessage;
 import org.qortal.network.message.*;
 import org.qortal.network.message.MessageException;
@@ -115,6 +116,7 @@ public class RNSPeer {
     @Setter(AccessLevel.PACKAGE) private Instant lastPingResponseReceived = null; // time last (packet) ping succeeded
     private Map<Integer, BlockingQueue<Message>> replyQueues;
     private LinkedBlockingQueue<Message> pendingMessages;
+    private boolean syncInProgress = false;
     // Versioning
     public static final Pattern VERSION_PATTERN = Pattern.compile(Controller.VERSION_PREFIX
             + "(\\d{1,3})\\.(\\d{1,5})\\.(\\d{1,5})");
@@ -128,7 +130,10 @@ public class RNSPeer {
      * Our common block with this peer
      */
     private CommonBlockData commonBlockData;
-
+    /**
+     * Last time we detected this peer as TOO_DIVERGENT
+     */
+    private Long lastTooDivergentTime;
 
     /**
      * Constructor for initiator peers
@@ -346,6 +351,7 @@ public class RNSPeer {
                 Message message = Message.fromByteBuffer(bb);
                 //log.info("*=> type {} message received ({} bytes): {}", message.getType(), data.length, message);
                 log.info("*=> type {} message received ({} bytes)", message.getType(), data.length);
+
                 // Handle message based on type
                 switch (message.getType()) {
                     // Do we need this ? (seems like a TCP scenario only thing)
@@ -372,6 +378,31 @@ public class RNSPeer {
                     //    onPeersV2Message(peer, message);
                     //    break;
 
+                    case BLOCK_SUMMARIES:
+                        // from Synchronizer
+                        addToQueue(message);
+                        break;
+
+                    case BLOCK_SUMMARIES_V2:
+                        // from Synchronizer
+                        addToQueue(message);
+                        break;
+
+                    case SIGNATURES:
+                        // from Synchronizer
+                        addToQueue(message);
+                        break;
+
+                    case BLOCK:
+                        // from Synchronizer
+                        addToQueue(message);
+                        break;
+
+                    case BLOCK_V2:
+                        // from Synchronizer
+                        addToQueue(message);
+                        break;
+
                     default:
                         log.info("default - type {} message received ({} bytes)", message.getType(), data.length);
                         // Bump up to controller for possible action
@@ -387,9 +418,26 @@ public class RNSPeer {
         }
     }
 
-    //public void handleMessage(Message message) {
-    //    
-    //}
+    /**
+     * we need to queue all incomming messages that follow request/response
+     * with explicit handling of the response message.
+     */
+    public void addToQueue(Message message) {
+        if (message.getType() == MessageType.UNSUPPORTED) {
+            log.trace("discarding/skipping UNSUPPORTED message");
+            return;
+        }
+        BlockingQueue<Message> queue = this.replyQueues.get(message.getId());
+        if (queue != null) {
+            // Adding message to queue will unblock thread waiting for response
+            this.replyQueues.get(message.getId()).add(message);
+            // Consumed elsewhere
+        }
+        else if (!this.pendingMessages.offer(message)) {
+            log.info("[{}] Busy, no room to queue message from peer {} - discarding",
+                    this.peerLink, this);
+        }
+    }
 
     /**
      * Set a packet to remote with the message format "close::<our_destination_hash>"
@@ -558,9 +606,9 @@ public class RNSPeer {
      * @return <code>Message</code> if valid response received; <code>null</code> if not or error/exception occurs
      * @throws InterruptedException if interrupted while waiting
      */
-    public void getResponse(Message message) throws InterruptedException {
+    public Message getResponse(Message message) throws InterruptedException {
         log.info("RNSPingTask action - pinging peer {}", encodeHexString(getDestinationHash()));
-        getResponseWithTimeout(message, RESPONSE_TIMEOUT);
+        return getResponseWithTimeout(message, RESPONSE_TIMEOUT);
     }
 
     /**
@@ -577,7 +625,7 @@ public class RNSPeer {
      * @return <code>Message</code> if valid response received; <code>null</code> if not or error/exception occurs
      * @throws InterruptedException if interrupted while waiting
      */
-    public void getResponseWithTimeout(Message message, int timeout) throws InterruptedException {
+    public Message getResponseWithTimeout(Message message, int timeout) throws InterruptedException {
         BlockingQueue<Message> blockingQueue = new ArrayBlockingQueue<>(1);
         // TODO: implement equivalent of Peer class...
         // Assign random ID to this message
@@ -594,11 +642,11 @@ public class RNSPeer {
         // Try to send message
         if (!this.sendMessageWithTimeout(message, timeout)) {
             this.replyQueues.remove(id);
-            return;
+            return null;
         }
 
         try {
-            blockingQueue.poll(timeout, TimeUnit.MILLISECONDS);
+            return blockingQueue.poll(timeout, TimeUnit.MILLISECONDS);
         } finally {
             this.replyQueues.remove(id);
         }
@@ -764,5 +812,21 @@ public class RNSPeer {
 
     public void setCommonBlockData(CommonBlockData commonBlockData) {
         this.commonBlockData = commonBlockData;
+    }
+
+    // Common block data
+    public boolean canUseCachedCommonBlockData() {
+        BlockSummaryData peerChainTipData = this.getChainTipData();
+        if (peerChainTipData == null || peerChainTipData.getSignature() == null)
+            return false;
+         CommonBlockData commonBlockData = this.getCommonBlockData();
+        if (commonBlockData == null)
+            return false;
+         BlockSummaryData commonBlockChainTipData = commonBlockData.getChainTipData();
+        if (commonBlockChainTipData == null || commonBlockChainTipData.getSignature() == null)
+            return false;
+         if (!Arrays.equals(peerChainTipData.getSignature(), commonBlockChainTipData.getSignature()))
+            return false;
+         return true;
     }
 }

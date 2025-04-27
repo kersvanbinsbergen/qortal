@@ -945,7 +945,19 @@ public class Controller extends Thread {
 		return peerChainTipData == null || peerChainTipData.getTimestamp() == null || peerChainTipData.getTimestamp() < minLatestBlockTimestamp;
 	};
 
+	public static final Predicate<RNSPeer> hasNoRecentBlock2 = peer -> {
+		final Long minLatestBlockTimestamp = getMinimumLatestBlockTimestamp();
+		final BlockSummaryData peerChainTipData = peer.getChainTipData();
+		return peerChainTipData == null || peerChainTipData.getTimestamp() == null || peerChainTipData.getTimestamp() < minLatestBlockTimestamp;
+	};
+
 	public static final Predicate<Peer> hasNoOrSameBlock = peer -> {
+		final BlockData latestBlockData = getInstance().getChainTip();
+		final BlockSummaryData peerChainTipData = peer.getChainTipData();
+		return peerChainTipData == null || peerChainTipData.getSignature() == null || Arrays.equals(latestBlockData.getSignature(), peerChainTipData.getSignature());
+	};
+
+	public static final Predicate<RNSPeer> hasNoOrSameBlock2 = peer -> {
 		final BlockData latestBlockData = getInstance().getChainTip();
 		final BlockSummaryData peerChainTipData = peer.getChainTipData();
 		return peerChainTipData == null || peerChainTipData.getSignature() == null || Arrays.equals(latestBlockData.getSignature(), peerChainTipData.getSignature());
@@ -956,7 +968,19 @@ public class Controller extends Thread {
 		return peerChainTipData == null || peerChainTipData.getHeight() == 1;
 	};
 
+	public static final Predicate<RNSPeer> hasOnlyGenesisBlock2 = peer -> {
+		final BlockSummaryData peerChainTipData = peer.getChainTipData();
+		return peerChainTipData == null || peerChainTipData.getHeight() == 1;
+	};
+
+
 	public static final Predicate<Peer> hasInferiorChainTip = peer -> {
+		final BlockSummaryData peerChainTipData = peer.getChainTipData();
+		final List<ByteArray> inferiorChainTips = Synchronizer.getInstance().inferiorChainSignatures;
+		return peerChainTipData == null || peerChainTipData.getSignature() == null || inferiorChainTips.contains(ByteArray.wrap(peerChainTipData.getSignature()));
+	};
+
+	public static final Predicate<RNSPeer> hasInferiorChainTip2 = peer -> {
 		final BlockSummaryData peerChainTipData = peer.getChainTipData();
 		final List<ByteArray> inferiorChainTips = Synchronizer.getInstance().inferiorChainSignatures;
 		return peerChainTipData == null || peerChainTipData.getSignature() == null || inferiorChainTips.contains(ByteArray.wrap(peerChainTipData.getSignature()));
@@ -968,6 +992,18 @@ public class Controller extends Thread {
 	};
 
 	public static final Predicate<Peer> hasInvalidSigner = peer -> {
+		final BlockSummaryData peerChainTipData = peer.getChainTipData();
+		if (peerChainTipData == null)
+			return true;
+
+		try (Repository repository = RepositoryManager.getRepository()) {
+			return Account.getRewardShareEffectiveMintingLevel(repository, peerChainTipData.getMinterPublicKey()) == 0;
+		} catch (DataException e) {
+			return true;
+		}
+	};
+
+	public static final Predicate<RNSPeer> hasInvalidSigner2 = peer -> {
 		final BlockSummaryData peerChainTipData = peer.getChainTipData();
 		if (peerChainTipData == null)
 			return true;
