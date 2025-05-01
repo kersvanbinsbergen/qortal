@@ -2918,7 +2918,7 @@ public class Controller extends Thread {
 			return true;
 
 		// Needs a mutable copy of the unmodifiableList
-		List<RNSPeer> peers = new ArrayList<>(RNSNetwork.getInstance().getImmutableLinkedPeers());
+		List<RNSPeer> peers = new ArrayList<>(RNSNetwork.getInstance().getImmutableActiveLinkedPeers());
 		if (peers == null)
 			return false;
 
