@@ -83,6 +83,7 @@ import org.qortal.network.message.TransactionSignaturesMessage;
 import org.qortal.network.message.GetUnconfirmedTransactionsMessage;
 import org.qortal.network.task.RNSBroadcastTask;
 import org.qortal.network.task.RNSPrunePeersTask;
+import org.qortal.data.network.RNSPeerData;
 import org.qortal.controller.Controller;
 import org.qortal.repository.Repository;
 import org.qortal.repository.RepositoryManager;
@@ -107,7 +108,7 @@ public class RNSNetwork {
     private final int MAX_PEERS = Settings.getInstance().getReticulumMaxPeers();
     private final int MIN_DESIRED_PEERS = Settings.getInstance().getReticulumMinDesiredPeers();
     // How long [ms] between pruning of peers
-	private long PRUNE_INTERVAL = 1 * 60 * 1000L; // ms;
+	private long PRUNE_INTERVAL = 1 * 64 * 1000L; // ms;
     
     Identity serverIdentity;
     public Destination baseDestination;
@@ -251,7 +252,7 @@ public class RNSNetwork {
     }
 
     public void broadcast(Function<RNSPeer, Message> peerMessageBuilder) {
-        for (RNSPeer peer : getImmutableLinkedPeers()) {
+        for (RNSPeer peer : getImmutableActiveLinkedPeers()) {
             if (this.isShuttingDown) {
                 return;
             }
@@ -530,7 +531,7 @@ public class RNSNetwork {
         //// Note: we might not need this. All messages handled asynchronously in Reticulum
         ////       (RNSPeer peerBufferReady callback)
         //private Task maybeProducePeerMessageTask() {
-        //    return getImmutableLinkedPeers().stream()
+        //    return getImmutableActiveLinkedPeers().stream()
         //            .map(RNSPeer::getMessageTask)
         //            .filter(Objects::nonNull)
         //            .findFirst()
@@ -554,7 +555,7 @@ public class RNSNetwork {
             //    log.info("ilp - {}", ilp);
             //}
             //return ilp;
-            return getImmutableLinkedPeers().stream()
+            return getImmutableActiveLinkedPeers().stream()
                     .map(peer -> peer.getPingTask(now))
                     .filter(Objects::nonNull)
                     .findFirst()
@@ -586,6 +587,16 @@ public class RNSNetwork {
 
     public static RNSNetwork getInstance() {
         return SingletonContainer.INSTANCE;
+    }
+
+    public List<RNSPeer> getImmutableActiveLinkedPeers() {
+        List<RNSPeer> activePeers = Collections.synchronizedList(new ArrayList<>());
+        for (RNSPeer p: this.immutableLinkedPeers) {
+            if (nonNull(p.getPeerLink()) && (p.getPeerLink().getStatus() == ACTIVE)) {
+                activePeers.add(p);
+            }
+        }
+        return activePeers;
     }
 
     public List<RNSPeer> getImmutableLinkedPeers() {
@@ -663,6 +674,23 @@ public class RNSNetwork {
             result = true;
         }
         return result;
+    }
+
+    public void peerMisbehaved(RNSPeer peer) {
+        RNSPeerData peerData = peer.getPeerData();
+        peerData.setLastMisbehaved(NTP.getTime());
+
+        //// Only update repository if outbound/initiator peer
+        //if (peer.getIsInitiator()) {
+        //    try (Repository repository = RepositoryManager.getRepository()) {
+        //        synchronized (this.allKnownPeers) {
+        //            repository.getNetworkRepository().save(peerData);
+        //            repository.saveChanges();
+        //        }
+        //    } catch (DataException e) {
+        //        log.warn("Repository issue while updating peer synchronization info", e);
+        //    }
+        //}
     }
 
     public List<RNSPeer> incomingNonActivePeers() {
