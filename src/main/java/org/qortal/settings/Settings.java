@@ -621,7 +621,7 @@ public class Settings {
 	/** Maximum number of Reticulum peers allowed. */
 	private int reticulumMaxPeers = 55;
 	/** Minimum number of Reticulum peers desired. */
-	private int reticulumMinDesiredPeers = 3;
+	private int reticulumMinDesiredPeers = 8;
 	/** Maximum number of task executor network threads */
 	private int reticulumMaxNetworkThreadPoolSize = 89;
 

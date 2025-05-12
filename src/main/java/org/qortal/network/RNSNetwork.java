@@ -749,7 +749,9 @@ public class RNSNetwork {
     }
 
     public void maybeAnnounce(Destination d) {
-        if (getActiveImmutableLinkedPeers().size() < MIN_DESIRED_PEERS) {
+        var activePeers = getActiveImmutableLinkedPeers().size();
+        if (activePeers <= MIN_DESIRED_PEERS) {
+            log.info("Active peers ({}) <= desired peers ({}). Announcing", activePeers, MIN_DESIRED_PEERS);
             d.announce();
         }
     }
