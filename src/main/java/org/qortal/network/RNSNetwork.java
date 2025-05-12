@@ -252,7 +252,7 @@ public class RNSNetwork {
     }
 
     public void broadcast(Function<RNSPeer, Message> peerMessageBuilder) {
-        for (RNSPeer peer : getImmutableActiveLinkedPeers()) {
+        for (RNSPeer peer : getActiveImmutableLinkedPeers()) {
             if (this.isShuttingDown) {
                 return;
             }
@@ -531,7 +531,7 @@ public class RNSNetwork {
         //// Note: we might not need this. All messages handled asynchronously in Reticulum
         ////       (RNSPeer peerBufferReady callback)
         //private Task maybeProducePeerMessageTask() {
-        //    return getImmutableActiveLinkedPeers().stream()
+        //    return getActiveImmutableLinkedPeers().stream()
         //            .map(RNSPeer::getMessageTask)
         //            .filter(Objects::nonNull)
         //            .findFirst()
@@ -555,7 +555,7 @@ public class RNSNetwork {
             //    log.info("ilp - {}", ilp);
             //}
             //return ilp;
-            return getImmutableActiveLinkedPeers().stream()
+            return getActiveImmutableLinkedPeers().stream()
                     .map(peer -> peer.getPingTask(now))
                     .filter(Objects::nonNull)
                     .findFirst()
@@ -589,7 +589,7 @@ public class RNSNetwork {
         return SingletonContainer.INSTANCE;
     }
 
-    public List<RNSPeer> getImmutableActiveLinkedPeers() {
+    public List<RNSPeer> getActiveImmutableLinkedPeers() {
         List<RNSPeer> activePeers = Collections.synchronizedList(new ArrayList<>());
         for (RNSPeer p: this.immutableLinkedPeers) {
             if (nonNull(p.getPeerLink()) && (p.getPeerLink().getStatus() == ACTIVE)) {
@@ -615,7 +615,7 @@ public class RNSNetwork {
         if (nonNull(peer.getPeerLink())) {
             peer.getPeerLink().teardown();
         }
-        this.linkedPeers.remove(peer); // thread safe
+        this.linkedPeers.remove(this.linkedPeers.indexOf(peer)); // thread safe
         this.immutableLinkedPeers = List.copyOf(this.linkedPeers);
     }
 
@@ -635,7 +635,7 @@ public class RNSNetwork {
         if (nonNull(peer.getPeerLink())) {
             peer.getPeerLink().teardown();
         }
-        this.incomingPeers.remove(peer);
+        this.incomingPeers.remove(this.incomingPeers.indexOf(peer));
         this.immutableIncomingPeers = List.copyOf(this.incomingPeers);
     }
 
@@ -676,7 +676,7 @@ public class RNSNetwork {
         //}
     }
 
-    public List<RNSPeer> incomingNonActivePeers() {
+    public List<RNSPeer> getNonActiveIncommingPeers() {
         var ips = getIncomingPeers();
         List<RNSPeer> result = Collections.synchronizedList(new ArrayList<>());
         Link pl;
@@ -695,86 +695,61 @@ public class RNSNetwork {
 
     //@Synchronized
     public void prunePeers() throws DataException {
-        // run periodically (by the Controller)
-        var peerList = getImmutableLinkedPeers();
-        var incomingPeerList = getImmutableIncomingPeers();
-        //log.info("number of links (linkedPeers / incomingPeers) before prunig: {}, {}", peerList.size(),
-        //        incomingPeerList.size());
-        log.info("number of links (linkedPeers (active) / incomingPeers before prunig: {} ({}), {}",
-                getImmutableLinkedPeers().size(), getImmutableActiveLinkedPeers().size(),
-                getImmutableIncomingPeers().size());
         // prune initiator peers
-        List<RNSPeer> lps =  getImmutableLinkedPeers();
-        for (RNSPeer p : lps) {
+        //var peerList = getImmutableLinkedPeers();
+        var initiatorPeerList = getImmutableLinkedPeers();
+        var initiatorActivePeerList = getActiveImmutableLinkedPeers();
+        var incomingPeerList = getImmutableIncomingPeers();
+        log.info("number of links (linkedPeers (active) / incomingPeers before prunig: {} ({}), {}",
+                initiatorPeerList.size(), getActiveImmutableLinkedPeers().size(),
+                incomingPeerList.size());
+        for (RNSPeer p: initiatorActivePeerList) {
+            var pLink = p.getOrInitPeerLink();
+            p.pingRemote();
+        }
+        for (RNSPeer p : initiatorPeerList) {
             var pLink = p.getPeerLink();
             if (nonNull(pLink)) {
+                if (p.getPeerTimedOut()) {
+                    // options: keep in case peer reconnects or remove => we'll remove it
+                    removeLinkedPeer(p);
+                    continue;
+                }
+                if (pLink.getStatus() == ACTIVE) {
+                    continue;
+                }
+                if (pLink.getStatus() == CLOSED) {
+                    removeLinkedPeer(p);
+                    continue;
+                }
                 if (pLink.getStatus() == PENDING) {
                     pLink.teardown();
-                }
-                if (p.getPeerTimedOut()) {
-                    pLink.teardown();
-                }
-                log.info("peer link: {}, status: {}", pLink, pLink.getStatus());
-                if (pLink.getStatus() == ACTIVE) {
-                    p.pingRemote();
-                } else {
                     removeLinkedPeer(p);
+                    continue;
                 }
             }
         }
-        //Link pLink;
-        //LinkStatus lStatus;
-        //var now = Instant.now();
-        //for (RNSPeer p: peerList) {
-        //    pLink = p.getPeerLink();
-        //    var peerLastAccessTimestamp = p.getLastAccessTimestamp();
-        //    var peerLastPingResponseReceived = p.getLastPingResponseReceived();
-        //    log.info("peerLink: {}, status: {}", pLink, pLink.getStatus());
-        //    log.info("prunePeers - pLink: {}, destinationHash: {}",
-        //        pLink, Hex.encodeHexString(p.getDestinationHash()));
-        //    log.debug("peer: {}", p);
-        //    if (nonNull(pLink)) {
-        //        if ((p.getPeerTimedOut()) && (peerLastPingResponseReceived.isBefore(now.minusMillis(LINK_UNREACHABLE_TIMEOUT)))) {
-        //            // close peer link for now
-        //            pLink.teardown();
-        //        }
-        //        lStatus = pLink.getStatus();
-        //        log.info("Link {} status: {}", pLink, lStatus);
-        //        // lStatus in: PENDING, HANDSHAKE, ACTIVE, STALE, CLOSED
-        //        if ((lStatus == STALE) || (pLink.getTeardownReason() == TIMEOUT) || (isUnreachable(p))) {
-        //            //p.shutdown();
-        //            //peerList.remove(p);
-        //            removeLinkedPeer(p);
-        //        } else if (lStatus == HANDSHAKE) {
-        //            // stuck in handshake state (do we need to shutdown/remove it?)
-        //            log.info("peer status HANDSHAKE");
-        //            //p.shutdown();
-        //            //peerList.remove(p);
-        //            removeLinkedPeer(p);
-        //        }
-        //        // either reach peer or disable link
-        //        p.pingRemote();
-        //    } else {
-        //        if (peerLastPingResponseReceived.isBefore(now.minusMillis(LINK_UNREACHABLE_TIMEOUT))) {
-        //            //peerList.remove(p);
-        //            removeLinkedPeer(p);
-        //        }
-        //    }
-        //}
-        List<RNSPeer> inaps = incomingNonActivePeers();
-        //log.info("number of inactive incoming peers: {}", inaps.size());
+        // prune non-initiator peers
+        List<RNSPeer> inaps = getNonActiveIncommingPeers();
         for (RNSPeer p: inaps) {
-            //incomingPeerList.remove(incomingPeerList.indexOf(p));
+            var pLink = p.getPeerLink();
+            if (nonNull(pLink)) {
+                // could be eg. PENDING
+                pLink.teardown();
+            }
             removeIncomingPeer(p);
         }
+        initiatorPeerList = getImmutableLinkedPeers();
+        initiatorActivePeerList = getActiveImmutableLinkedPeers();
+        incomingPeerList = getImmutableIncomingPeers();
         log.info("number of links (linkedPeers (active) / incomingPeers after prunig: {} ({}), {}",
-                getImmutableLinkedPeers().size(), getImmutableActiveLinkedPeers().size(),
-                getImmutableIncomingPeers().size());
+                initiatorPeerList.size(), getActiveImmutableLinkedPeers().size(),
+                incomingPeerList.size());
         maybeAnnounce(getBaseDestination());
     }
 
     public void maybeAnnounce(Destination d) {
-        if (getImmutableActiveLinkedPeers().size() < MIN_DESIRED_PEERS) {
+        if (getActiveImmutableLinkedPeers().size() < MIN_DESIRED_PEERS) {
             d.announce();
         }
     }

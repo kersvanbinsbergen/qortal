@@ -767,7 +767,7 @@ public class Controller extends Thread {
 		//
 		//		if (needsArchiveRebuildRNS && !canBootstrap) {
 		//			LOGGER.info("Start syncing from genesis (RNS)!");
-		//			List<RNSPeer> seeds = new ArrayList<>(RNSNetwork.getInstance().getImmutableActiveLinkedPeers());
+		//			List<RNSPeer> seeds = new ArrayList<>(RNSNetwork.getInstance().getActiveImmutableLinkedPeers());
 		//
 		//			// Check if have a qualified peer to sync
 		//			if (seeds.isEmpty()) {
@@ -2985,7 +2985,7 @@ public class Controller extends Thread {
 			return true;
 
 		// Needs a mutable copy of the unmodifiableList
-		List<RNSPeer> peers = new ArrayList<>(RNSNetwork.getInstance().getImmutableActiveLinkedPeers());
+		List<RNSPeer> peers = new ArrayList<>(RNSNetwork.getInstance().getActiveImmutableLinkedPeers());
 		if (peers == null)
 			return false;
 
