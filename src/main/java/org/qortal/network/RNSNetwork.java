@@ -676,7 +676,7 @@ public class RNSNetwork {
         //}
     }
 
-    public List<RNSPeer> getNonActiveIncommingPeers() {
+    public List<RNSPeer> getNonActiveIncomingPeers() {
         var ips = getIncomingPeers();
         List<RNSPeer> result = Collections.synchronizedList(new ArrayList<>());
         Link pl;
@@ -700,9 +700,10 @@ public class RNSNetwork {
         var initiatorPeerList = getImmutableLinkedPeers();
         var initiatorActivePeerList = getActiveImmutableLinkedPeers();
         var incomingPeerList = getImmutableIncomingPeers();
-        log.info("number of links (linkedPeers (active) / incomingPeers before prunig: {} ({}), {}",
+        var numActiveIncomingPeers = incomingPeerList.size() - getNonActiveIncomingPeers().size();
+        log.info("number of links (linkedPeers (active) / incomingPeers (active) before prunig: {} ({}), {} ({})",
                 initiatorPeerList.size(), getActiveImmutableLinkedPeers().size(),
-                incomingPeerList.size());
+                incomingPeerList.size(), numActiveIncomingPeers);
         for (RNSPeer p: initiatorActivePeerList) {
             var pLink = p.getOrInitPeerLink();
             p.pingRemote();
@@ -730,7 +731,7 @@ public class RNSNetwork {
             }
         }
         // prune non-initiator peers
-        List<RNSPeer> inaps = getNonActiveIncommingPeers();
+        List<RNSPeer> inaps = getNonActiveIncomingPeers();
         for (RNSPeer p: inaps) {
             var pLink = p.getPeerLink();
             if (nonNull(pLink)) {
@@ -742,10 +743,10 @@ public class RNSNetwork {
         initiatorPeerList = getImmutableLinkedPeers();
         initiatorActivePeerList = getActiveImmutableLinkedPeers();
         incomingPeerList = getImmutableIncomingPeers();
-        log.info("number of links (linkedPeers (active) / incomingPeers after prunig: {} ({}), {}",
+        numActiveIncomingPeers = incomingPeerList.size() - getNonActiveIncomingPeers().size();
+        log.info("number of links (linkedPeers (active) / incomingPeers (active) after prunig: {} ({}), {} ({})",
                 initiatorPeerList.size(), getActiveImmutableLinkedPeers().size(),
-                incomingPeerList.size());
-        maybeAnnounce(getBaseDestination());
+                incomingPeerList.size(), numActiveIncomingPeers);
     }
 
     public void maybeAnnounce(Destination d) {
