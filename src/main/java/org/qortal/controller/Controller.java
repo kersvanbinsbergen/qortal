@@ -543,8 +543,8 @@ public class Controller extends Thread {
 		LOGGER.info("Starting synchronizer");
 		Synchronizer.getInstance().start();
 
-		LOGGER.info("Starting synchronizer over Reticulum");
-		RNSSynchronizer.getInstance().start();
+		//LOGGER.info("Starting synchronizer over Reticulum");
+		//RNSSynchronizer.getInstance().start();
 
 		LOGGER.info("Starting block minter");
 		blockMinter = new BlockMinter();
@@ -2378,22 +2378,22 @@ public class Controller extends Thread {
 			//	OnlineAccountsManager.getInstance().onNetworkOnlineAccountsV3Message(peer, message);
 			//	break;
 			
-			//// TODO: Compiles but much of the Manager details need to be rethought for Reticulum
-			//case GET_ARBITRARY_DATA:
-			//	// Not currently supported
-			//	break;
-			////
-			//case ARBITRARY_DATA_FILE_LIST:
-			//	RNSArbitraryDataFileListManager.getInstance().onNetworkArbitraryDataFileListMessage(peer, message);
-			//	break;
-			//
-			//case GET_ARBITRARY_DATA_FILE:
-			//	RNSArbitraryDataFileManager.getInstance().onNetworkGetArbitraryDataFileMessage(peer, message);
-			//	break;
-			//
-			//case GET_ARBITRARY_DATA_FILE_LIST:
-			//	RNSArbitraryDataFileListManager.getInstance().onNetworkGetArbitraryDataFileListMessage(peer, message);
-			//	break;
+			// TODO: Compiles but rethink for Reticulum
+			case GET_ARBITRARY_DATA:
+				// Not currently supported
+				break;
+
+			case ARBITRARY_DATA_FILE_LIST:
+				RNSArbitraryDataFileListManager.getInstance().onNetworkArbitraryDataFileListMessage(peer, message);
+				break;
+
+			case GET_ARBITRARY_DATA_FILE:
+				RNSArbitraryDataFileManager.getInstance().onNetworkGetArbitraryDataFileMessage(peer, message);
+				break;
+
+			case GET_ARBITRARY_DATA_FILE_LIST:
+				RNSArbitraryDataFileListManager.getInstance().onNetworkGetArbitraryDataFileListMessage(peer, message);
+				break;
 			//
 			case ARBITRARY_SIGNATURES:
 				// Not currently supported
