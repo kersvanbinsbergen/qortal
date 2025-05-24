@@ -599,9 +599,10 @@ public class RNSNetwork {
         return activePeers;
     }
 
-    public List<RNSPeer> getImmutableLinkedPeers() {
-        return this.immutableLinkedPeers;
-    }
+    // note: we already have a lobok getter for this
+    //public List<RNSPeer> getImmutableLinkedPeers() {
+    //    return this.immutableLinkedPeers;
+    //}
 
     public void addLinkedPeer(RNSPeer peer) {
         this.linkedPeers.add(peer);
@@ -615,16 +616,17 @@ public class RNSNetwork {
         if (nonNull(peer.getPeerLink())) {
             peer.getPeerLink().teardown();
         }
-        this.linkedPeers.remove(this.linkedPeers.indexOf(peer)); // thread safe
+        var p = this.linkedPeers.remove(this.linkedPeers.indexOf(peer)); // thread safe
         this.immutableLinkedPeers = List.copyOf(this.linkedPeers);
     }
 
-    public List<RNSPeer> getLinkedPeers() {
-        //synchronized(this.linkedPeers) {
-            //return new ArrayList<>(this.linkedPeers);
-            return this.linkedPeers;
-        //}
-    }
+    // note: we already have a lobok getter for this
+    //public List<RNSPeer> getLinkedPeers() {
+    //    //synchronized(this.linkedPeers) {
+    //        //return new ArrayList<>(this.linkedPeers);
+    //        return this.linkedPeers;
+    //    //}
+    //}
 
     public void addIncomingPeer(RNSPeer peer) {
         this.incomingPeers.add(peer);
@@ -635,17 +637,17 @@ public class RNSNetwork {
         if (nonNull(peer.getPeerLink())) {
             peer.getPeerLink().teardown();
         }
-        this.incomingPeers.remove(this.incomingPeers.indexOf(peer));
+        var p = this.incomingPeers.remove(this.incomingPeers.indexOf(peer));
         this.immutableIncomingPeers = List.copyOf(this.incomingPeers);
     }
 
-    public List<RNSPeer> getIncomingPeers() {
-        return this.incomingPeers;
-    }
-
-    public List<RNSPeer> getImmutableIncomingPeers() {
-        return this.immutableIncomingPeers;
-    }
+    // note: we already have a lobok getter for this
+    //public List<RNSPeer> getIncomingPeers() {
+    //    return this.incomingPeers;
+    //}
+    //public List<RNSPeer> getImmutableIncomingPeers() {
+    //    return this.immutableIncomingPeers;
+    //}
 
     // TODO, methods for: getAvailablePeer
 
@@ -811,6 +813,14 @@ public class RNSNetwork {
 
     public byte[] getMessageMagic() {
         return Settings.getInstance().isTestNet() ? TESTNET_MESSAGE_MAGIC : MAINNET_MESSAGE_MAGIC;
+    }
+
+    public String getOurNodeId() {
+        return this.serverIdentity.toString();
+    }
+
+    protected byte[] getOurPublicKey() {
+        return this.serverIdentity.getPublicKey();
     }
 
     // Network methods Reticulum implementation

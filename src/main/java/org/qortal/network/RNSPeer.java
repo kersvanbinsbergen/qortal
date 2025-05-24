@@ -116,6 +116,7 @@ public class RNSPeer {
     private LinkedBlockingQueue<Message> pendingMessages;
     private boolean syncInProgress = false;
     private RNSPeerData peerData = null;
+    private long linkEstablishedTime = -1L; // equivalent of (tcpip) Peer 'handshakeComplete'
     // Versioning
     public static final Pattern VERSION_PATTERN = Pattern.compile(Controller.VERSION_PREFIX
             + "(\\d{1,3})\\.(\\d{1,5})\\.(\\d{1,5})");
@@ -281,6 +282,7 @@ public class RNSPeer {
 
     /** Link callbacks */
     public void linkEstablished(Link link) {
+        this.linkEstablishedTime = System.currentTimeMillis();
         link.setLinkClosedCallback(this::linkClosed);
         log.info("peerLink {} established (link: {}) with peer: hash - {}, link destination hash: {}", 
             encodeHexString(peerLink.getLinkId()), encodeHexString(link.getLinkId()), encodeHexString(destinationHash),
@@ -374,7 +376,7 @@ public class RNSPeer {
                 //log.info("***> creating message from {} bytes", data.length);
                 Message message = Message.fromByteBuffer(bb);
                 //log.info("*=> type {} message received ({} bytes): {}", message.getType(), data.length, message);
-                log.info("*=> type {} message received ({} bytes, id: {}", message.getType(), data.length, message.getId());
+                log.info("*=> type {} message received ({} bytes, id: {})", message.getType(), data.length, message.getId());
 
                 // Handle message based on type
                 switch (message.getType()) {
@@ -565,8 +567,6 @@ public class RNSPeer {
     /** Utility methods */
     public void pingRemote() {
         var link = this.peerLink;
-        //if (nonNull(link) & (isFalse(link.isInitiator()))) {
-        //if (nonNull(link) & link.isInitiator()) {
         if (nonNull(link)) {
             if (peerLink.getStatus() == ACTIVE) {
                 log.info("pinging remote (direct, 1 packet): {}", encodeHexString(link.getLinkId()));
@@ -878,5 +878,17 @@ public class RNSPeer {
 
     public List<byte[]> getPendingSignatureRequests() {
         return this.pendingSignatureRequests;
+    }
+
+    // Details used by API
+    public long getConnectionEstablishedTime() {
+        return linkEstablishedTime;
+    }
+
+    public long getConnectionAge() {
+        if (linkEstablishedTime > 0L) {
+            return System.currentTimeMillis() - linkEstablishedTime;
+        }
+        return linkEstablishedTime;
     }
 }
