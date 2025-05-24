@@ -46,7 +46,7 @@ reticulum:
   # an optional directive, and can be left out for brevity.
   # This behaviour is disabled by default.
 
-  panic_on_interface_error: true
+  panic_on_interface_error: false
 
 
 # The interfaces section defines the physical and virtual
