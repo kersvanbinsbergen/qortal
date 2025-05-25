@@ -614,9 +614,9 @@ public class Settings {
 		}
 	}
 
-	// Related to Reticulum networking
+	// Related to mesh networking
 
-	/** Preferred network: tcpip or reticulum */
+	/** Preferred network: "tcpip" or "reticulum" */
 	private String preferredNetwork = "reticulum";
 	/** Maximum number of Reticulum peers allowed. */
 	private int reticulumMaxPeers = 55;

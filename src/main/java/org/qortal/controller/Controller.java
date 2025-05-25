@@ -1238,6 +1238,7 @@ public class Controller extends Thread {
 
 				LOGGER.info("Shutting down synchronizer");
 				Synchronizer.getInstance().shutdown();
+				RNSSynchronizer.getInstance().shutdown();
 
 				LOGGER.info("Shutting down API");
 				ApiService.getInstance().stop();
@@ -2732,7 +2733,7 @@ public class Controller extends Thread {
 		peer.setChainTipData(newChainTipData);
 
 		// Potentially synchronize
-		Synchronizer.getInstance().requestSync();
+		RNSSynchronizer.getInstance().requestSync();
 	}
 
 	private void onRNSNetworkBlockSummariesV2Message(RNSPeer peer, Message message) {
@@ -2763,7 +2764,7 @@ public class Controller extends Thread {
 		peer.setChainTipSummaries(blockSummariesV2Message.getBlockSummaries());
 
 		// Potentially synchronize
-		Synchronizer.getInstance().requestSync();
+		RNSSynchronizer.getInstance().requestSync();
 	}
 
 	// ************
